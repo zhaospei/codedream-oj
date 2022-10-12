@@ -4,13 +4,13 @@
 
 {% block after_rank_head %}
     {% if has_rating %}
-        <th>{{ _('Rating') }}</th>
+        <th class="rating-column"">{{ _('Rating') }}</th>
     {% endif %}
 {% endblock %}
 
 {% block after_rank %}
     {% if has_rating %}
-        <td>{% if user.participation_rating %}{{ rating_number(user.participation_rating) }}{% endif %}</td>
+        <td class="rating-column">{% if user.participation_rating %}{{ rating_number(user.participation_rating) }}{% endif %}</td>
     {% endif %}
 {% endblock %}
 
@@ -53,10 +53,12 @@
 {% endblock %}
 
 {% block before_point_head %}
+    <th class="full-name" style="display:none;">{{ _('Fullname') }}</th>
     {% for problem in problems %}
         <th class="points header problem-score-col" title="{{ problem.problem.name }}"><a href="{{ url('problem_detail', problem.problem.code) }}">
             {{- contest.get_label_for_problem(loop.index0) }}
             <div class="point-denominator">{{ problem.points }}</div>
+            <div class="problem-code" style="display: none;">{{ problem.problem.code }}</div>
         </a></th>
     {% endfor %}
 {% endblock %}
