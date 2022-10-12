@@ -28,4 +28,5 @@ Support plagiarism detection via [Stanford MOSS](https://theory.stanford.edu/~ai
 ## Installation
 
 Most of the setup are the same as LQDOJ installations. You can view the installation guide of LQDOJ here: https://github.com/LQDJudge/online-judge
+
 There is one minor change: Instead of `git clone https://github.com/LQDJudge/online-judge.git`, you clone this repo `git clone https://github.com/zhaospei/codedream-oj.git`.
