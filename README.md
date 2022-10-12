@@ -8,7 +8,7 @@ CDOJ: CodeDream Online Judge
 
 ## Overview
 
-Homepage: [https://oj.codedream.edu.vn](https://oj.codedream.edu.vn)
+Homepage: [http://oj.codedream.edu.vn/](http://oj.codedream.edu.vn)
 
 Based on [LQDOJ](https://lqdoj.edu.vn/).
 
