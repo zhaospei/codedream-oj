@@ -4,6 +4,7 @@ import pyotp
 from django import forms
 from django.conf import settings
 from django.contrib.auth.forms import AuthenticationForm
+from django.contrib.auth.models import User
 from django.core.exceptions import ValidationError, ObjectDoesNotExist
 from django.core.validators import RegexValidator
 from django.db.models import Q
@@ -110,6 +111,11 @@ class ProfileForm(ModelForm):
                 Q(is_open=True) | Q(id__in=user.profile.organizations.all()),
             )
 
+
+class UserForm(ModelForm):
+    class Meta:
+        model = User
+        fields = ['first_name', 'email']
 
 class ProblemSubmitForm(ModelForm):
     source = CharField(

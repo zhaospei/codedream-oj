@@ -93,16 +93,26 @@
             {% endif %}
 
             {% csrf_token %}
+            
+            <table>
+                <tr>
+                    <td><div class="block-header">{{ _('Fullname') }}:</div></td>
+                </tr>
+                <tr>
+                    <td>{{ form_user.first_name }}</td>                
+                </tr>
+            </table>
+            <hr>
 
-            {% if edit_name_url %}
-            <div style="margin-bottom: 1em; font-size: 1.1em">
-                <label style="color:#666">{{_('Name and School')}}:</label>
-                <span>
-                    <a href="{{edit_name_url}}">{{_('Enter this form')}}</a>
-                    <span style="float: right">({{_('It takes some time for admin to approve')}})</span>
-                </span>
-            </div>
-            {% endif %}
+            <table>
+                <tr>
+                    <td><div class="block-header">{{ _('Email') }}:</div></td>
+                </tr>
+                <tr>
+                    <td>{{ form_user.email }}</td>                
+                </tr>
+            </table>
+            <hr>
 
             <div style="padding-top:0.5em" class="block-header">{{ _('Self-description') }}:</div>
             {{ form.about }}
