@@ -181,7 +181,7 @@ header {
     }
 
     a {
-        color: lightcoral;
+        color: $light-color;
     }
 
     li {
@@ -290,16 +290,16 @@ nav {
                 }
 
                 &:hover {
-                    border-top: 2px solid #9c3706;
-                    color: lightcoral;
+                    border-top: 2px solid $regular-color;
+                    color: $light-color;
                     background: rgba(255, 255, 255, 0.25);
                     margin: 0;
                 }
 
                 &.active {
                     // color: #FFF;
-                    border-top: 2px solid #9c3706;
-                    color: #9c3706;
+                    border-top: 2px solid $regular-color;
+                    color: $regular-color;
                     background: white;
                 }
 
@@ -314,7 +314,7 @@ nav {
                 left: 5px;
                 display: none;
                 color: #fff;
-                background: darkcyan;
+                background: $regular-color;
                 margin: 0 !important;
                 box-shadow: 2px 2px 4px rgba(0, 0, 0, 0.4);
 
@@ -322,6 +322,7 @@ nav {
                     &:first-child {
                         a.active {
                             border-top: 1px solid $widget_black;
+                            background-color: $light-color !important;
                         }
                     }
                 }

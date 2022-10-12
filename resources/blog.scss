@@ -38,11 +38,11 @@
 }
 
 .left-sidebar-item.active {
-    color: green;
+    color: $max-color;
     font-weight: bold;
-    background-color: lightgreen;
+    background-color: #955cc4;
     .sidebar-icon {
-        color: green;
+        color: $weight-color;
     }
 }
 
@@ -183,7 +183,7 @@
     cursor: pointer;
 }
 .left-sidebar-item.active:hover {
-    background-color: lightgreen;
+    background-color: $light-color;
 }
 .sidebar-icon {
     color: black;
