@@ -1,0 +1,91 @@
+{% extends "user/base-users.html" %}
+
+{% block title_ruler %}{% endblock %}
+
+{% block title_row %}
+    {% set title = contest.name %}
+    {% include "contest/contest-tabs.html" %}
+{% endblock %}
+
+{% block users_media %}
+    <link href="//cdn.jsdelivr.net/npm/featherlight@1.7.14/release/featherlight.min.css" type="text/css" rel="stylesheet" />
+    {% include "contest/ranking-css.html" %}
+{% endblock %}
+
+{% block users_js_media %}
+    {% if can_edit %}
+        <script type="text/javascript">
+            $(function () {
+                $('a.disqualify-participation').click(function (e) {
+                    e.preventDefault();
+                    if (e.ctrlKey || e.metaKey || confirm("{{ _('Are you sure you want to disqualify this participation?') }}"))
+                        $(this).closest('form').submit();
+                })
+                $('a.un-disqualify-participation').click(function (e) {
+                    e.preventDefault();
+                    if (e.ctrlKey || e.metaKey || confirm("{{ _('Are you sure you want to un-disqualify this participation?') }}"))
+                        $(this).closest('form').submit();
+                })
+            });
+        </script>
+    {% endif %}
+    {% if perms.judge.change_contestparticipation %}
+        <script type="text/javascript">
+            $(function () {
+                $('td.user').find('a.user-name').click(function (e) {
+                    var data = $(this).siblings('.edit-participation');
+                    if (e.altKey && data.length) {
+                        window.open(data.attr('data-link'), '_blank');
+                        return false;
+                    }
+                });
+            });
+        </script>
+    {% endif %}
+    {% if not contest.ended %}
+        <script type="text/javascript">
+            $(function () {
+                window.install_tooltips = function () {
+                    $('td.user').find('a.user-name').each(function () {
+                        var link = $(this);
+                        link.mouseenter(function (e) {
+                            var start_time = link.siblings('.start-time').text();
+                            link.addClass('tooltipped tooltipped-e').attr('aria-label', start_time);
+                        }).mouseleave(function (e) {
+                            link.removeClass('tooltipped tooltipped-e').removeAttr('aria-label');
+                        });
+                    });
+                };
+
+                install_tooltips();
+            });
+        </script>
+    {% endif %}
+    {% include "contest/media-js.html" %}
+{% endblock %}
+
+{% block users_table %}
+    <div style="margin-bottom: 0.5em">
+        {% if tab == 'participation' %}
+            {% if contest.can_see_full_scoreboard(request.user) %}
+                <input id="search-contest" type="text" placeholder="{{ _('View user participation') }}">
+            {% endif %}
+        {% endif %}
+        <input id="show-organizations-checkbox" type="checkbox" style="vertical-align: bottom">
+        <label for="show-organizations-checkbox" style="vertical-align: bottom; margin-right: 1em;">{{ _('Show organizations') }}</label>
+    
+        <input id="show-fullnames-checkbox" type="checkbox" style="vertical-align: bottom">
+
+        <label for="show-fullnames-checkbox" style="vertical-align: bottom; margin-right: 1em;">{{ _('Show full name') }}</label>
+        {% if request.user.is_authenticated %}
+        <input id="show-friends-checkbox" type="checkbox" style="vertical-align: bottom;">
+        <label for="show-friends-checkbox" style="vertical-align: bottom; margin-right: 1em;">{{ _('Show friends only') }}</label>
+        {% endif %}
+        <input id="show-total-score-checkbox" type="checkbox" style="vertical-align: bottom; ">
+        <label for="show-total-score-checkbox" style="vertical-align: bottom; margin-right: 1em;">{{ _('Total score only') }}</label>
+        <input id="show-virtual-checkbox" type="checkbox" style="vertical-align: bottom;">
+        <label id="show-virtual-label" for="show-virtual-checkbox" style="vertical-align: bottom; margin-right: 1em;">{{ _('Show virtual participation') }}</label>
+        <img src="{{static('loading.gif')}}" style="height: 1em; display:none;" id="loading-gif"></img>
+    </div>
+    {% include "contest/ranking-table.html" %}
+{% endblock %}

@@ -1,0 +1,16 @@
+[0;1;32m●[0m supervisor.service - Supervisor process control system for UNIX
+     Loaded: loaded (/lib/systemd/system/supervisor.service; enabled; vendor preset: enabled)
+     Active: [0;1;32mactive (running)[0m since Tue 2022-09-20 16:58:05 +07; 8min ago
+       Docs: http://supervisord.org
+   Main PID: 4795 (supervisord)
+      Tasks: 1 (limit: 7044)
+     Memory: 14.8M
+     CGroup: /system.slice/supervisor.service
+             └─4795 /usr/bin/python3 /usr/bin/supervisord -n -c /etc/supervisor/supervisord.conf
+
+Sep 20 16:58:05 oj systemd[1]: Started Supervisor process control system for UNIX.
+Sep 20 16:58:06 oj supervisord[4795]: 2022-09-20 16:58:06,032 CRIT Supervisor is running as root.  Privileges were not dropped because no user is specified in the config file.  If you intend to run as root, you can set user=root in the config file to avoid this message.
+Sep 20 16:58:06 oj supervisord[4795]: 2022-09-20 16:58:06,032 WARN No file matches via include "/etc/supervisor/conf.d/*.conf"
+Sep 20 16:58:06 oj supervisord[4795]: 2022-09-20 16:58:06,037 INFO RPC interface 'supervisor' initialized
+Sep 20 16:58:06 oj supervisord[4795]: 2022-09-20 16:58:06,038 CRIT Server 'unix_http_server' running without any HTTP authentication checking
+Sep 20 16:58:06 oj supervisord[4795]: 2022-09-20 16:58:06,038 INFO supervisord started with pid 4795
