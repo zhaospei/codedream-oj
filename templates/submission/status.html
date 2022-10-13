@@ -1,132 +1,82 @@
 {% extends "submission/info-base.html" %}
-{% block media %}
-    <style>
-        .line {
-            position: relative;
-        }
+{% block js_media %}
+    {% if not submission.is_graded and EVENT_LAST_MSG %}
+        <script type="text/javascript">
+            $(function () {
+                var blocked = false, request = false;
+                var list = $('#test-cases');
 
-        .highlighter {
-            position: absolute;
-            width: 9999px;
-            top: 0;
-            bottom: 0;
-            left: 0;
-            right: 0;
-        }
+                function update() {
+                    if (blocked) {
+                        request = true;
+                        return;
+                    }
+                    request = false;
+                    blocked = true;
+                    $.ajax({
+                        url: '{{ url('submission_testcases_query') }}',
+                        data: {id: '{{ submission.id }}'}
+                    }).done(function (data) {
+                        list.empty().html(data).find('.toggle').each(function () {
+                            register_toggle($(this));
+                        });
+                        setTimeout(function () {
+                            blocked = false;
+                            if (request)
+                                update();
+                        }, 500);
+                    }).fail(function (data) {
+                        console.log('Failed to update testcases!');
+                    });
 
-        a:active .line .highlighter {
-            background: rgba(255, 212, 0, 0.48);
-        }
+                    if ($(window).scrollTop() + $(window).height() > $(document).height() - 100)
+                        $("html, body").animate({scrollTop: $(document).height()}, 0);
+                }
 
-        .copy-clipboard {
-            margin-top: 0;
-        }
-
-        .testcases-table tbody:last-child {
-            border-bottom: none;
-        }
-
-        .toggle {
-            cursor: pointer;
-            font-weight: 400;
-        }
-
-        #source-header {
-            font-size: 1.54em;
-            margin-bottom: 1em;
-        }
-
-        .case-icons i {
-            font-size: large;
-            font-weight: bolder;
-            cursor: pointer;
-        }
-    </style>
-{% endblock %}
-{% block content_js_media %}
-    <script type="text/javascript" src="{{ static('event.js') }}"></script>
-    <script type="text/javascript">
-        function setup_icons() {
-            $(".case-icons i").each(function() {
-                $(this).on("click", function() {
-                    var id = "tr#" + $(this).attr("id").split("-")[1];
-                    $(id).click();
-                    $([document.documentElement, document.body]).animate({
-                            scrollTop: $(id).offset().top - 50
-                        }, 800);
+                event_dispatcher.on('sub_{{ submission.id_secret }}', function (message) {
+                        switch (message.type) {
+                            case 'internal-error':
+                            case 'grading-end':
+                            case 'compile-error':
+                                $('#abort-button').remove();
+                                $('#grading-label').remove();
+                            case 'test-case':
+                            case 'grading-begin':
+                            case 'processing':
+                                update();
+                        }
+                    }
+                )
+            });
+        </script>
+    {% endif %}
+    {% if not submission.is_graded %}
+        <script type="text/javascript">
+            $(function () {
+                $(document).keydown(function(e) {
+                    // Ctrl-Enter or Command-Enter
+                    if ((e.metaKey || e.ctrlKey) && e.which == 13) {
+                        $('#abort-button form').submit();
+                    }
                 });
             });
-        }
-        $(function() {
-            setup_icons();
-        });
-    </script>
-    {% if not submission.is_graded and last_msg %}
-        <script type="text/javascript">$(function () {
-            var blocked = false, request = false;
-            var list = $('#test-cases');
-
-            function update() {
-                if (blocked) {
-                    request = true;
-                    return;
-                }
-                request = false;
-                blocked = true;
-                $.ajax({
-                    url: '{{ url('submission_testcases_query') }}',
-                    data: {id: '{{ submission.id }}'}
-                }).done(function (data) {
-                    data = $(data);
-                    list.find(".open").each(function() {
-                        var id = $(this).attr("id");
-                        data.find("#" + id).removeClass("closed").addClass("open");
-                        data.find("#" + id + "-output").show();
-                    });
-                    list.empty().html(data).find('.toggle').each(function () {
-                        register_toggle($(this));
-                    });
-                    setup_icons();
-                    setTimeout(function () {
-                        blocked = false;
-                        if (request)
-                            update();
-                    }, 500);
-                }).fail(function (data) {
-                    console.log('Failed to update testcases!');
-                });
-
-                if ($(window).scrollTop() + $(window).height() > $(document).height() - 100)
-                    $("html, body").animate({scrollTop: $(document).height()}, 0);
-            }
-
-            var receiver = new EventReceiver(
-                "{{ EVENT_DAEMON_LOCATION }}", "{{ EVENT_DAEMON_POLL_LOCATION }}",
-                ['sub_{{ submission.id_secret }}'], {{ last_msg }}, function (message) {
-                    switch (message.type) {
-                        case 'internal-error':
-                        case 'grading-end':
-                        case 'compile-error':
-                            $('#abort-button').remove();
-                            $('#grading-label').remove();
-                        case 'test-case':
-                        case 'grading-begin':
-                        case 'processing':
-                            update();
-                    }
-                }
-            )
-        });
         </script>
     {% endif %}
 {% endblock %}
+
 {% block body %}
-    <div style="clear: both"></div>
     <br>
-    {% if request.user == submission.user.user or perms.judge.resubmit_other %}
+    {% if not submission.language.file_only or request.user.is_superuser %}
+        <div><a href="{{ url('submission_source', submission.id) }}">{{ _('View source') }}</a></div>
+    {% endif %}
+    {% if submission.language.file_only %}
+        <div><a href="{{ url('submission_source_download', submission.id) }}">{{ _('Download') }}</a></div>
+    {% endif %}
+    {% if (request.user == submission.user.user or perms.judge.resubmit_other) and not submission.language.file_only %}
         <div><a href="{{ url('problem_submit', submission.problem.code, submission.id) }}">{{ _('Resubmit') }}</a></div>
     {% endif %}
-    {% if perms.judge.rejudge_submission %}
+    {% set can_edit = submission.problem.is_editable_by(request.user) %}
+    {% if perms.judge.rejudge_submission and can_edit and not submission.is_locked %}
         <div>
             <form action="{{ url('submission_rejudge') }}" method="post">
                 {% csrf_token %}
@@ -136,34 +86,24 @@
             </form>
         </div>
     {% endif %}
+    {% if can_edit and not submission.language.file_only %}
+        <div><a href="{{ url('problem_submission_diff', submission.problem.code) }}?username={{ submission.user.user.username }}&highlight={{ submission.id }}">{{ _('Diff this submission') }}</a></div>
+    {% endif %}
 
     <br>
-    <h3 id="source-header" class="toggle closed"><i class="fa fa-chevron-right fa-fw"></i>{{_('Source code')}}</h3>
-    <div class="source-wrap toggled" style="display: none; margin-bottom: 1em">
-        <table style="width: 100%">
-            <tr>
-                <td class="source-ln" style="width: 0">
-                    <div>
-                        {% for line in raw_source.split('\n') %}
-                            <a href="#line-{{ loop.index }}" name="line-{{ loop.index }}">
-                                <pre class="line">{{ loop.index }}</pre>
-                            </a>
-                        {% endfor %}
-                    </div>
-                </td>
-                <td class="source-code">{{ highlighted_source }}</td>
-            </tr>
-        </table>
-    </div>
+    <hr class="half-hr">
+    <br>
 
     <div id="test-cases">{% include "submission/status-testcases.html" %}</div>
+
     {% if not submission.is_graded %}
-        {% if perms.judge.abort_any_submission %}
+        {% if request.user == submission.user.user or perms.judge.abort_any_submission %}
             <div id="abort-button">
                 <br>
-                <hr>
+                <hr class="half-hr">
                 <br>
-                <form action="{{ url('submission_abort', submission.id) }}" method="post">
+                <form action="{{ url('submission_abort', submission.id) }}" method="post"
+                      title="{{ _('Press Ctrl-Enter or Command-Enter to abort.') }}">
                     {% csrf_token %}
                     <input style="float:left" type="submit" value="{{ _('Abort') }}" class="button">
                     <br><br>
