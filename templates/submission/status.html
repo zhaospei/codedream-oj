@@ -77,9 +77,16 @@
                     url: '{{ url('submission_testcases_query') }}',
                     data: {id: '{{ submission.id }}'}
                 }).done(function (data) {
+                    data = $(data);
+                    list.find(".open").each(function() {
+                        var id = $(this).attr("id");
+                        data.find("#" + id).removeClass("closed").addClass("open");
+                        data.find("#" + id + "-output").show();
+                    });
                     list.empty().html(data).find('.toggle').each(function () {
                         register_toggle($(this));
                     });
+                    setup_icons();
                     setTimeout(function () {
                         blocked = false;
                         if (request)
