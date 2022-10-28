@@ -10,6 +10,12 @@ CDOJ: CodeDream Online Judge
 
 Homepage: [http://oj.codedream.edu.vn/](http://oj.codedream.edu.vn)
 
+
+![image](https://user-images.githubusercontent.com/48708971/198748491-32cf9303-8e26-4b8c-a8cd-db4daa66d19b.png)
+
+![image](https://user-images.githubusercontent.com/48708971/198748548-f6125299-eeca-4641-b4e3-ba1b7a3e212c.png)
+
+
 Based on [LQDOJ](https://lqdoj.edu.vn/).
 
 Supported languages: 
