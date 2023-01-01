@@ -3,10 +3,11 @@ from operator import attrgetter
 import pyotp
 from django import forms
 from django.conf import settings
-from django.contrib.auth.forms import AuthenticationForm
 from django.contrib.auth.models import User
+from django.contrib.auth.forms import AuthenticationForm
 from django.core.exceptions import ValidationError, ObjectDoesNotExist
 from django.core.validators import RegexValidator
+from django.db import transaction
 from django.db.models import Q
 from django.forms import (
     CharField,
@@ -33,7 +34,7 @@ from judge.models import (
     BlogPost,
     ContestProblem,
 )
-from judge.utils.subscription import newsletter_id
+
 from judge.widgets import (
     HeavyPreviewPageDownWidget,
     MathJaxPagedownWidget,
@@ -45,6 +46,7 @@ from judge.widgets import (
     Select2MultipleWidget,
     DateTimePickerWidget,
 )
+from judge.tasks import rescore_contest
 
 
 def fix_unicode(string, unsafe=tuple("\u202a\u202b\u202d\u202e")):
@@ -53,15 +55,16 @@ def fix_unicode(string, unsafe=tuple("\u202a\u202b\u202d\u202e")):
     )
 
 
-class ProfileForm(ModelForm):
-    if newsletter_id is not None:
-        newsletter = forms.BooleanField(
-            label=_("Subscribe to contest updates"), initial=False, required=False
-        )
-    test_site = forms.BooleanField(
-        label=_("Enable experimental features"), initial=False, required=False
-    )
+class UserForm(ModelForm):
+    class Meta:
+        model = User
+        fields = [
+            "first_name",
+            "last_name",
+        ]
 
+
+class ProfileForm(ModelForm):
     class Meta:
         model = Profile
         fields = [
@@ -111,11 +114,6 @@ class ProfileForm(ModelForm):
                 Q(is_open=True) | Q(id__in=user.profile.organizations.all()),
             )
 
-
-class UserForm(ModelForm):
-    class Meta:
-        model = User
-        fields = ['first_name', 'email']
 
 class ProblemSubmitForm(ModelForm):
     source = CharField(
@@ -244,6 +242,13 @@ class EditOrganizationContestForm(ModelForm):
             self.fields[field].widget.data_url = (
                 self.fields[field].widget.get_url() + "?org_id=1"
             )
+
+    def save(self, commit=True):
+        res = super(EditOrganizationContestForm, self).save(commit=False)
+        if commit:
+            res.save()
+            transaction.on_commit(rescore_contest.s(res.key).delay)
+        return res
 
     class Meta:
         model = Contest

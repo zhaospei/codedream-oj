@@ -13,6 +13,7 @@ from django.db import transaction
 from django.db.models import Count, Max, Min
 from django.db.models.fields import DateField
 from django.db.models.functions import Cast, ExtractYear
+from judge.models.bookmark import MakeBookMark
 from django.forms import Form
 from django.http import (
     Http404,
@@ -34,14 +35,13 @@ from django.views.generic import DetailView, ListView, TemplateView
 from django.template.loader import render_to_string
 from reversion import revisions
 
-from judge.forms import ProfileForm, UserForm, newsletter_id
+from judge.forms import UserForm, ProfileForm
 from judge.models import Profile, Rating, Submission, Friend
 from judge.performance_points import get_pp_breakdown
 from judge.ratings import rating_class, rating_progress
 from judge.tasks import import_users
 from judge.utils.problems import contest_completed_ids, user_completed_ids
 from judge.utils.ranker import ranker
-from judge.utils.subscription import Subscription
 from judge.utils.unicode import utf8text
 from judge.utils.views import (
     DiggPaginatorMixin,
@@ -52,7 +52,14 @@ from judge.utils.views import (
 )
 from .contests import ContestRanking
 
-__all__ = ["UserPage", "UserAboutPage", "UserProblemsPage", "users", "edit_profile"]
+__all__ = [
+    "UserPage",
+    "UserAboutPage",
+    "UserProblemsPage",
+    "UserBookMarkPage",
+    "users",
+    "edit_profile",
+]
 
 
 def remap_keys(iterable, mapping):
@@ -350,6 +357,21 @@ class UserProblemsPage(UserPage):
         return context
 
 
+class UserBookMarkPage(UserPage):
+    template_name = "user/user-bookmarks.html"
+
+    def get_context_data(self, **kwargs):
+        context = super(UserBookMarkPage, self).get_context_data(**kwargs)
+
+        bookmark_list = MakeBookMark.objects.filter(user=self.object)
+        context["blogs"] = bookmark_list.filter(bookmark__page__startswith="b")
+        context["problems"] = bookmark_list.filter(bookmark__page__startswith="p")
+        context["contests"] = bookmark_list.filter(bookmark__page__startswith="c")
+        context["solutions"] = bookmark_list.filter(bookmark__page__startswith="s")
+
+        return context
+
+
 class UserPerformancePointsAjax(UserProblemsPage):
     template_name = "user/pp-table-body.html"
 
@@ -384,67 +406,27 @@ def edit_profile(request):
     if profile.mute:
         raise Http404()
     if request.method == "POST":
-        form = ProfileForm(request.POST, instance=profile, user=request.user)
         form_user = UserForm(request.POST, instance=request.user)
-        if form.is_valid() and form_user.is_valid():
+        form = ProfileForm(request.POST, instance=profile, user=request.user)
+        if form_user.is_valid() and form.is_valid():
             with transaction.atomic(), revisions.create_revision():
                 form_user.save()
                 form.save()
                 revisions.set_user(request.user)
                 revisions.set_comment(_("Updated on site"))
-
-            if newsletter_id is not None:
-                try:
-                    subscription = Subscription.objects.get(
-                        user=request.user, newsletter_id=newsletter_id
-                    )
-                except Subscription.DoesNotExist:
-                    if form.cleaned_data["newsletter"]:
-                        Subscription(
-                            user=request.user,
-                            newsletter_id=newsletter_id,
-                            subscribed=True,
-                        ).save()
-                else:
-                    if subscription.subscribed != form.cleaned_data["newsletter"]:
-                        subscription.update(
-                            ("unsubscribe", "subscribe")[
-                                form.cleaned_data["newsletter"]
-                            ]
-                        )
-
-            perm = Permission.objects.get(
-                codename="test_site",
-                content_type=ContentType.objects.get_for_model(Profile),
-            )
-            if form.cleaned_data["test_site"]:
-                request.user.user_permissions.add(perm)
-            else:
-                request.user.user_permissions.remove(perm)
-
             return HttpResponseRedirect(request.path)
     else:
-        form = ProfileForm(instance=profile, user=request.user)
         form_user = UserForm(instance=request.user)
-        if newsletter_id is not None:
-            try:
-                subscription = Subscription.objects.get(
-                    user=request.user, newsletter_id=newsletter_id
-                )
-            except Subscription.DoesNotExist:
-                form.fields["newsletter"].initial = False
-            else:
-                form.fields["newsletter"].initial = subscription.subscribed
-        form.fields["test_site"].initial = request.user.has_perm("judge.test_site")
+        form = ProfileForm(instance=profile, user=request.user)
 
     tzmap = settings.TIMEZONE_MAP
-    print(settings.REGISTER_NAME_URL)
+
     return render(
         request,
         "user/edit-profile.html",
         {
-            "edit_name_url": settings.REGISTER_NAME_URL,
-            "require_staff_2fa": settings.DMOJ_REQUIRE_STAFF_2FA, 'form_user': form_user,
+            "require_staff_2fa": settings.DMOJ_REQUIRE_STAFF_2FA,
+            "form_user": form_user,
             "form": form,
             "title": _("Edit profile"),
             "profile": profile,
@@ -600,3 +582,11 @@ def sample_import_users(request):
     response = HttpResponse(content, content_type="text/plain")
     response["Content-Disposition"] = "attachment; filename={0}".format(filename)
     return response
+
+
+def toggle_darkmode(request):
+    path = request.GET.get("next")
+    if not path:
+        return HttpResponseBadRequest()
+    request.session["darkmode"] = not request.session.get("darkmode", False)
+    return HttpResponseRedirect(path)

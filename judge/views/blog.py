@@ -1,4 +1,3 @@
-from django.conf import settings
 from django.db.models import Count, Max, Q
 from django.http import Http404
 from django.urls import reverse
@@ -8,17 +7,20 @@ from django.utils.translation import ugettext as _
 from django.views.generic import ListView
 
 from judge.comments import CommentedDetailView
+from judge.views.pagevote import PageVoteDetailView, PageVoteListView
+from judge.views.bookmark import BookMarkDetailView, BookMarkListView
 from judge.models import (
     BlogPost,
     Comment,
     Contest,
     Language,
     Problem,
-    ProblemClarification,
+    ContestProblemClarification,
     Profile,
     Submission,
     Ticket,
 )
+from judge.models.profile import Organization, OrganizationProfile
 from judge.utils.cachedict import CacheDict
 from judge.utils.diggpaginator import DiggPaginator
 from judge.utils.problems import user_completed_ids
@@ -50,8 +52,8 @@ class FeedView(ListView):
         if self.request.user.is_authenticated:
             participation = self.request.profile.current_contest
             if participation:
-                clarifications = ProblemClarification.objects.filter(
-                    problem__in=participation.contest.problems.all()
+                clarifications = ContestProblemClarification.objects.filter(
+                    problem__in=participation.contest.contest_problems.all()
                 )
                 context["has_clarifications"] = clarifications.count() > 0
                 context["clarifications"] = clarifications.order_by("-date")
@@ -74,10 +76,14 @@ class FeedView(ListView):
             .filter(is_visible=True)
             .order_by("start_time")
         )
+
         context["current_contests"] = visible_contests.filter(
             start_time__lte=now, end_time__gt=now
         )
         context["future_contests"] = visible_contests.filter(start_time__gt=now)
+        context[
+            "recent_organizations"
+        ] = OrganizationProfile.get_most_recent_organizations(self.request.profile)
         context["top_rated"] = Profile.objects.filter(is_unlisted=False).order_by(
             "-rating"
         )[:10]
@@ -88,7 +94,7 @@ class FeedView(ListView):
         return context
 
 
-class PostList(FeedView):
+class PostList(FeedView, PageVoteListView, BookMarkListView):
     model = BlogPost
     paginate_by = 10
     context_object_name = "posts"
@@ -122,8 +128,12 @@ class PostList(FeedView):
             .annotate(count=Count("page"))
             .order_by()
         }
-
+        context = self.add_pagevote_context_data(context)
+        context = self.add_bookmark_context_data(context)
         return context
+
+    def get_comment_page(self, post):
+        return "b:%s" % post.id
 
 
 class TicketFeed(FeedView):
@@ -186,7 +196,7 @@ class CommentFeed(FeedView):
         return context
 
 
-class PostView(TitleMixin, CommentedDetailView):
+class PostView(TitleMixin, CommentedDetailView, PageVoteDetailView, BookMarkDetailView):
     model = BlogPost
     pk_url_kwarg = "id"
     context_object_name = "post"
@@ -201,6 +211,21 @@ class PostView(TitleMixin, CommentedDetailView):
     def get_context_data(self, **kwargs):
         context = super(PostView, self).get_context_data(**kwargs)
         context["og_image"] = self.object.og_image
+        context["valid_user_to_show_edit"] = False
+        context["valid_org_to_show_edit"] = []
+
+        if self.request.profile in self.object.authors.all():
+            context["valid_user_to_show_edit"] = True
+
+        for valid_org_to_show_edit in self.object.organizations.all():
+            if self.request.profile in valid_org_to_show_edit.admins.all():
+                context["valid_user_to_show_edit"] = True
+
+        if context["valid_user_to_show_edit"]:
+            for post_org in self.object.organizations.all():
+                if post_org in self.request.profile.organizations.all():
+                    context["valid_org_to_show_edit"].append(post_org)
+
         return context
 
     def get_object(self, queryset=None):

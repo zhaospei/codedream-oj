@@ -1,6 +1,5 @@
 from abc import ABCMeta, abstractmethod, abstractproperty
-
-from django.utils import six
+from django.db.models import Max
 
 
 class abstractclassmethod(classmethod):
@@ -11,7 +10,7 @@ class abstractclassmethod(classmethod):
         super(abstractclassmethod, self).__init__(callable)
 
 
-class BaseContestFormat(six.with_metaclass(ABCMeta)):
+class BaseContestFormat(metaclass=ABCMeta):
     @abstractmethod
     def __init__(self, contest, config):
         self.config = config
@@ -49,7 +48,7 @@ class BaseContestFormat(six.with_metaclass(ABCMeta)):
         raise NotImplementedError()
 
     @abstractmethod
-    def display_user_problem(self, participation, contest_problem):
+    def display_user_problem(self, participation, contest_problem, show_final):
         """
         Returns the HTML fragment to show a user's performance on an individual problem. This is expected to use
         information from the format_data field instead of computing it from scratch.
@@ -61,7 +60,7 @@ class BaseContestFormat(six.with_metaclass(ABCMeta)):
         raise NotImplementedError()
 
     @abstractmethod
-    def display_participation_result(self, participation):
+    def display_participation_result(self, participation, show_final):
         """
         Returns the HTML fragment to show a user's performance on the whole contest. This is expected to use
         information from the format_data field instead of computing it from scratch.
@@ -97,3 +96,24 @@ class BaseContestFormat(six.with_metaclass(ABCMeta)):
         if points == total:
             return "full-score"
         return "partial-score"
+
+    def handle_frozen_state(self, participation, format_data):
+        frozen_subtasks = {}
+        if hasattr(self, "get_frozen_subtasks"):
+            frozen_subtasks = self.get_frozen_subtasks()
+
+        queryset = participation.submissions.values("problem_id").annotate(
+            time=Max("submission__date")
+        )
+        for result in queryset:
+            problem = str(result["problem_id"])
+            if format_data.get(problem):
+                is_after_freeze = (
+                    self.contest.freeze_after
+                    and result["time"]
+                    >= self.contest.freeze_after + participation.start
+                )
+                if is_after_freeze or frozen_subtasks.get(problem):
+                    format_data[problem]["frozen"] = True
+            else:
+                format_data[problem] = {"time": 0, "points": 0, "frozen": True}

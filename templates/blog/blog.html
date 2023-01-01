@@ -2,10 +2,12 @@
 
 {% block js_media %}
     {% include "comments/media-js.html" %}
+    {% include "actionbar/media-js.html" %}
 {% endblock %}
 
 {% block media %}
     {% include "comments/media-css.html" %}
+    {% include "actionbar/media-css.html" %}
 {% endblock %}
 
 {% block title_row %}
@@ -27,21 +29,21 @@
                 {% trans time=post.publish_on|date(_("N j, Y, g:i a")) %} posted on {{ time }}{% endtrans %}
             </span>
             {% if post.is_editable_by(request.user) %}
-                <span> [<a href="{{ url('admin:judge_blogpost_change', post.id) }}">{{ _('Edit') }}</a>]</span>
+                <span> [<a href="{{ url('admin:judge_blogpost_change', post.id) }}">{{ _('Edit') }}</a>]</span>            
+            {% elif valid_user_to_show_edit %}
+                {% for org in valid_org_to_show_edit %}
+                    <span> [<a href="{{ url('edit_organization_blog', org.id , org.slug , post.id) }}">{{ _('Edit in') }} {{org.slug}}</a>]</span>
+                {% endfor %}
             {% endif %}
         </div>
         <div class="body content-description">
             {% cache 86400 'post_content' post.id MATH_ENGINE %}
-                {{ post.content|markdown('blog', MATH_ENGINE)|reference|str|safe}}
+                {{ post.content|markdown|reference|str|safe}}
             {% endcache %}
         </div>
+        {% include "actionbar/list.html" %}
     </div>
-    <hr>
-    <span class="social">
-        {{ post_to_gplus(request, post, '<i class="fa fa-google-plus-square"></i>') }}
-        {{ post_to_facebook(request, post, '<i class="fa fa-facebook-official"></i>') }}
-        {{ post_to_twitter(request, SITE_NAME + ':', post, '<i class="fa fa-twitter"></i>') }}
-    </span>
+    <hr style="width: 60%; margin:4em auto;">
     {% include "comments/list.html" %}
 {% endblock %}
 

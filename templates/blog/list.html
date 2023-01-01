@@ -1,15 +1,11 @@
 {% extends "three-column-content.html" %}
 {% block three_col_media %}
     {% include "blog/media-css.html" %}
+    {% include "actionbar/media-css.html" %}
     <style>
         @media (max-width: 799px) {
             .title {
                 clear: both;
-            }
-        }
-        @media (min-width: 800px) {
-            #event-tab {
-                display: none;
             }
         }
         .time {
@@ -20,22 +16,11 @@
             font-style: italic;
             text-align: center;
         }
-
-        h3 a {
-            color: lightcyan;
-        }
-
-        #add-clarification {
-            float: left;
-            color: chartreuse;
-        }
-        #add-clarification:hover {
-            color: cyan;
-        }
     </style>
 {% endblock %}
 
 {% block three_col_js %}
+    {% include "actionbar/media-js.html" %}
     <script type="text/javascript">
         $(document).ready(function () {
             $('.time-remaining').each(function () {
@@ -92,23 +77,24 @@
         {% if request.in_contest_mode and request.participation.contest.use_clarifications %}
             <div class="blog-sidebox sidebox">
                 <h3>{{ _('Clarifications') }}
-                        <i class="fa fa-question-circle"></i>
-                        {% if can_edit_contest %}
+                    <i class="fa fa-question-circle"></i>
+                    {% if can_edit_contest %}
                         <a href="{{url('new_contest_clarification', request.participation.contest.key)}}" 
                            class="fa fa-plus-circle" 
                            id="add-clarification"
-                           title="{{_('Add')}}">
+                           title="{{_('Add')}}"
+                           style="color: lightcyan">
                         </a>
-                        {% endif %}
+                    {% endif %}
                 </h3>
                 <div class="sidebox-content">
                     {% if has_clarifications %}
                         <ul>
                             {% for clarification in clarifications %}
                                 <li class="clarification">
-                                    <a href="{{ url('problem_detail', clarification.problem.code) }}"
+                                    <a href="{{ url('problem_detail', clarification.problem.problem.code) }}"
                                        class="problem">
-                                        {{ clarification.problem.name }}
+                                        {{ clarification.problem.problem.name }}
                                     </a>
                                     <span class="time">{{ relative_time(clarification.date) }}</span>
                                 </li>
@@ -123,6 +109,7 @@
             </div>
         {% endif %}
         {% include 'contests-countdown.html' %}
+        {% include 'recent-organization.html' %}
         {% include 'top-users.html' %}
     </div>
 {% endblock %}

@@ -5,13 +5,26 @@ from datetime import timedelta, datetime
 from operator import itemgetter
 from random import randrange
 import random
+from copy import deepcopy
 
 from django.conf import settings
 from django.contrib.auth.decorators import login_required
 from django.contrib.auth.mixins import PermissionRequiredMixin
 from django.core.exceptions import ObjectDoesNotExist, PermissionDenied
 from django.db import transaction
-from django.db.models import Count, F, Prefetch, Q, Sum, Case, When, IntegerField
+from django.db.models import (
+    BooleanField,
+    Case,
+    CharField,
+    Count,
+    F,
+    FilteredRelation,
+    Prefetch,
+    Q,
+    When,
+    IntegerField,
+)
+from django.db.models.functions import Coalesce
 from django.db.utils import ProgrammingError
 from django.http import (
     Http404,
@@ -40,7 +53,7 @@ from judge.models import (
     Judge,
     Language,
     Problem,
-    ProblemClarification,
+    ContestProblemClarification,
     ProblemGroup,
     ProblemTranslation,
     ProblemType,
@@ -49,7 +62,6 @@ from judge.models import (
     Solution,
     Submission,
     SubmissionSource,
-    TranslatedProblemForeignKeyQuerySet,
     Organization,
     VolunteerProblemVote,
     Profile,
@@ -74,6 +86,8 @@ from judge.utils.views import (
     generic_message,
 )
 from judge.ml.collab_filter import CollabFilter
+from judge.views.pagevote import PageVoteDetailView, PageVoteListView
+from judge.views.bookmark import BookMarkDetailView, BookMarkListView
 
 
 def get_contest_problem(problem, profile):
@@ -115,7 +129,6 @@ class ProblemMixin(object):
         try:
             return super(ProblemMixin, self).get(request, *args, **kwargs)
         except Http404 as e:
-            print(e)
             return self.no_such_problem()
 
 
@@ -161,7 +174,12 @@ class SolvedProblemMixin(object):
 
 
 class ProblemSolution(
-    SolvedProblemMixin, ProblemMixin, TitleMixin, CommentedDetailView
+    SolvedProblemMixin,
+    ProblemMixin,
+    TitleMixin,
+    CommentedDetailView,
+    PageVoteDetailView,
+    BookMarkDetailView,
 ):
     context_object_name = "problem"
     template_name = "problem/editorial.html"
@@ -226,7 +244,13 @@ class ProblemRaw(
             )
 
 
-class ProblemDetail(ProblemMixin, SolvedProblemMixin, CommentedDetailView):
+class ProblemDetail(
+    ProblemMixin,
+    SolvedProblemMixin,
+    CommentedDetailView,
+    PageVoteDetailView,
+    BookMarkDetailView,
+):
     context_object_name = "problem"
     template_name = "problem/problem.html"
 
@@ -251,7 +275,7 @@ class ProblemDetail(ProblemMixin, SolvedProblemMixin, CommentedDetailView):
         context["contest_problem"] = contest_problem
 
         if contest_problem:
-            clarifications = self.object.clarifications
+            clarifications = contest_problem.clarifications
             context["has_clarifications"] = clarifications.count() > 0
             context["clarifications"] = clarifications.order_by("-date")
             context["submission_limit"] = contest_problem.max_submissions
@@ -308,7 +332,6 @@ class ProblemDetail(ProblemMixin, SolvedProblemMixin, CommentedDetailView):
             metadata = generate_opengraph(
                 "generated-meta-problem:%s:%d" % (context["language"], self.object.id),
                 context["description"],
-                "problem",
             )
         context["meta_description"] = self.object.summary or metadata[0]
         context["og_image"] = self.object.og_image or metadata[1]
@@ -371,7 +394,7 @@ class ProblemPdfView(ProblemMixin, SingleObjectMixin, View):
                 maker.title = problem_name
                 assets = ["style.css", "pygment-github.css"]
                 if maker.math_engine == "jax":
-                    assets.append("mathjax_config.js")
+                    assets.append("mathjax3_config.js")
                 for file in assets:
                     maker.load(file, os.path.join(settings.DMOJ_RESOURCES, file))
                 maker.make()
@@ -408,11 +431,11 @@ class ProblemPdfDescriptionView(ProblemMixin, SingleObjectMixin, View):
         if not problem.pdf_description:
             raise Http404()
         response = HttpResponse()
-        if request.META.get("SERVER_SOFTWARE", "").startswith("nginx/"):
-            response["X-Accel-Redirect"] = problem.pdf_description.path
-        else:
-            with open(problem.pdf_description.path, "rb") as f:
-                response.content = f.read()
+        # if request.META.get("SERVER_SOFTWARE", "").startswith("nginx/"):
+        #    response["X-Accel-Redirect"] = problem.pdf_description.path
+        # else:
+        with open(problem.pdf_description.path, "rb") as f:
+            response.content = f.read()
 
         response["Content-Type"] = "application/pdf"
         response["Content-Disposition"] = "inline; filename=%s.pdf" % (problem.code,)
@@ -500,10 +523,22 @@ class ProblemList(QueryStringSortMixin, TitleMixin, SolvedProblemMixin, ListView
             .defer("problem__description")
             .order_by("problem__code")
             .annotate(user_count=Count("submission__participation", distinct=True))
+            .annotate(
+                i18n_translation=FilteredRelation(
+                    "problem__translations",
+                    condition=Q(
+                        problem__translations__language=self.request.LANGUAGE_CODE
+                    ),
+                )
+            )
+            .annotate(
+                i18n_name=Coalesce(
+                    F("i18n_translation__name"),
+                    F("problem__name"),
+                    output_field=CharField(),
+                )
+            )
             .order_by("order")
-        )
-        queryset = TranslatedProblemForeignKeyQuerySet.add_problem_i18n_name(
-            queryset, "i18n_name", self.request.LANGUAGE_CODE, "problem__name"
         )
         return [
             {
@@ -559,7 +594,6 @@ class ProblemList(QueryStringSortMixin, TitleMixin, SolvedProblemMixin, ListView
             )
         if self.org_query:
             self.org_query = self.get_org_query(self.org_query)
-            print(self.org_query)
             queryset = queryset.filter(
                 Q(organizations__in=self.org_query)
                 | Q(contests__contest__organizations__in=self.org_query)
@@ -596,12 +630,14 @@ class ProblemList(QueryStringSortMixin, TitleMixin, SolvedProblemMixin, ListView
         if self.point_end is not None:
             queryset = queryset.filter(points__lte=self.point_end)
         queryset = queryset.annotate(
-            has_public_editorial=Sum(
-                Case(
-                    When(solution__is_public=True, then=1),
-                    default=0,
-                    output_field=IntegerField(),
-                )
+            has_public_editorial=Case(
+                When(
+                    solution__is_public=True,
+                    solution__publish_on__lte=timezone.now(),
+                    then=True,
+                ),
+                default=False,
+                output_field=BooleanField(),
             )
         )
 
@@ -665,8 +701,8 @@ class ProblemList(QueryStringSortMixin, TitleMixin, SolvedProblemMixin, ListView
             if self.request.user.is_authenticated:
                 participation = self.request.profile.current_contest
                 if participation:
-                    clarifications = ProblemClarification.objects.filter(
-                        problem__in=participation.contest.problems.all()
+                    clarifications = ContestProblemClarification.objects.filter(
+                        problem__in=participation.contest.contest_problems.all()
                     )
                     context["has_clarifications"] = clarifications.count() > 0
                     context["clarifications"] = clarifications.order_by("-date")
@@ -783,10 +819,7 @@ class ProblemList(QueryStringSortMixin, TitleMixin, SolvedProblemMixin, ListView
         return HttpResponseRedirect(request.get_full_path())
 
 
-cf_logger = logging.getLogger("judge.ml.collab_filter")
-
-
-class ProblemFeed(ProblemList):
+class ProblemFeed(ProblemList, PageVoteListView, BookMarkListView):
     model = Problem
     context_object_name = "problems"
     template_name = "problem/feed.html"
@@ -811,6 +844,9 @@ class ProblemFeed(ProblemList):
             allow_empty_first_page=allow_empty_first_page,
             **kwargs
         )
+
+    def get_comment_page(self, problem):
+        return "p:%s" % problem.code
 
     # arr = [[], [], ..]
     def merge_recommendation(self, arr):
@@ -843,10 +879,12 @@ class ProblemFeed(ProblemList):
         user = self.request.profile
 
         if self.feed_type == "new":
-            return queryset.order_by("-date")
+            return queryset.order_by("-date").add_i18n_name(self.request.LANGUAGE_CODE)
         elif user and self.feed_type == "volunteer":
-            voted_problems = user.volunteer_problem_votes.values_list(
-                "problem", flat=True
+            voted_problems = (
+                user.volunteer_problem_votes.values_list("problem", flat=True)
+                if not bool(self.search_query)
+                else []
             )
             if self.show_solved_only:
                 queryset = queryset.filter(
@@ -854,60 +892,57 @@ class ProblemFeed(ProblemList):
                         user=self.profile, points=F("problem__points")
                     ).values_list("problem__id", flat=True)
                 )
-            return queryset.exclude(id__in=voted_problems).order_by("?")
+            return (
+                queryset.exclude(id__in=voted_problems)
+                .order_by("?")
+                .add_i18n_name(self.request.LANGUAGE_CODE)
+            )
         if not settings.ML_OUTPUT_PATH or not user:
-            return queryset.order_by("?")
+            return queryset.order_by("?").add_i18n_name(self.request.LANGUAGE_CODE)
 
-        # Logging
-        log_data = {
-            "user": self.request.user.username,
-            "cf": {
-                "dot": {},
-                "cosine": {},
-            },
-            "cf_time": {"dot": {}, "cosine": {}},
-        }
+        cf_model = CollabFilter("collab_filter")
+        cf_time_model = CollabFilter("collab_filter_time")
 
-        cf_model = CollabFilter("collab_filter", log_time=log_data["cf"])
-        cf_time_model = CollabFilter("collab_filter_time", log_time=log_data["cf_time"])
+        queryset = queryset.values_list("id", flat=True)
         hot_problems_recommendations = [
-            problem
+            problem.id
             for problem in hot_problems(timedelta(days=7), 20)
-            if problem in queryset
+            if problem.id in set(queryset)
         ]
 
         q = self.merge_recommendation(
             [
-                cf_model.user_recommendations(
-                    user, queryset, cf_model.DOT, 100, log_time=log_data["cf"]["dot"]
-                ),
+                cf_model.user_recommendations(user, queryset, cf_model.DOT, 100),
                 cf_model.user_recommendations(
                     user,
                     queryset,
                     cf_model.COSINE,
                     100,
-                    log_time=log_data["cf"]["cosine"],
                 ),
                 cf_time_model.user_recommendations(
                     user,
                     queryset,
                     cf_time_model.COSINE,
                     100,
-                    log_time=log_data["cf_time"]["cosine"],
                 ),
                 cf_time_model.user_recommendations(
                     user,
                     queryset,
                     cf_time_model.DOT,
                     100,
-                    log_time=log_data["cf_time"]["dot"],
                 ),
                 hot_problems_recommendations,
             ]
         )
+        queryset = Problem.objects.filter(id__in=q)
+        queryset = queryset.add_i18n_name(self.request.LANGUAGE_CODE)
 
-        cf_logger.info(log_data)
-        return q
+        # Reorder results from database to correct positions
+        res = [None for _ in range(len(q))]
+        position_in_q = {i: idx for idx, i in enumerate(q)}
+        for problem in queryset:
+            res[position_in_q[problem.id]] = problem
+        return res
 
     def get_context_data(self, **kwargs):
         context = super(ProblemFeed, self).get_context_data(**kwargs)
@@ -916,6 +951,8 @@ class ProblemFeed(ProblemList):
         context["feed_type"] = self.feed_type
         context["has_show_editorial_option"] = False
         context["has_have_editorial_option"] = False
+        context = self.add_pagevote_context_data(context)
+        context = self.add_bookmark_context_data(context)
 
         return context
 
@@ -1165,11 +1202,12 @@ class ProblemClone(
     permission_required = "judge.clone_problem"
 
     def form_valid(self, form):
-        problem = self.object
+        languages = self.object.allowed_languages.all()
+        language_limits = self.object.language_limits.all()
+        types = self.object.types.all()
 
-        languages = problem.allowed_languages.all()
-        language_limits = problem.language_limits.all()
-        types = problem.types.all()
+        problem = deepcopy(self.object)
+
         problem.pk = None
         problem.is_public = False
         problem.ac_rate = 0

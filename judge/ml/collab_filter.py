@@ -1,7 +1,8 @@
 import numpy as np
 from django.conf import settings
 import os
-from dmoj.decorators import timeit
+from django.core.cache import cache
+import hashlib
 
 
 class CollabFilter:
@@ -9,13 +10,13 @@ class CollabFilter:
     COSINE = "cosine"
 
     # name = 'collab_filter' or 'collab_filter_time'
-    @timeit
     def __init__(self, name, **kwargs):
         embeddings = np.load(
             os.path.join(settings.ML_OUTPUT_PATH, name + "/embeddings.npz"),
             allow_pickle=True,
         )
         arr0, arr1 = embeddings.files
+        self.name = name
         self.user_embeddings = embeddings[arr0]
         self.problem_embeddings = embeddings[arr1]
 
@@ -38,9 +39,14 @@ class CollabFilter:
         scores = u.dot(V.T)
         return scores
 
-    @timeit
     def user_recommendations(self, user, problems, measure=DOT, limit=None, **kwargs):
         uid = user.id
+        problems_hash = hashlib.sha1(str(problems).encode()).hexdigest()
+        cache_key = ":".join(map(str, [self.name, uid, measure, limit, problems_hash]))
+        value = cache.get(cache_key)
+        if value:
+            return value
+
         if uid >= len(self.user_embeddings):
             uid = 0
         scores = self.compute_scores(
@@ -48,13 +54,15 @@ class CollabFilter:
         )
 
         res = []  # [(score, problem)]
-        for problem in problems:
-            pid = problem.id
+        for pid in problems:
+            # pid = problem.id
             if pid < len(scores):
-                res.append((scores[pid], problem))
+                res.append((scores[pid], pid))
 
         res.sort(reverse=True, key=lambda x: x[0])
-        return res[:limit]
+        res = res[:limit]
+        cache.set(cache_key, res, 3600)
+        return res
 
     # return a list of pid
     def problems_neighbors(self, problem, problemset, measure=DOT, limit=None):

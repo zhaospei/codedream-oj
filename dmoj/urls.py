@@ -59,8 +59,11 @@ from judge.views import (
     totp,
     user,
     volunteer,
+    pagevote,
+    bookmark,
     widgets,
     internal,
+    resolver,
 )
 from judge.views.problem_data import (
     ProblemDataView,
@@ -210,6 +213,7 @@ urlpatterns = [
         name="home",
     ),
     url(r"^500/$", exception),
+    url(r"^toggle_darkmode/$", user.toggle_darkmode, name="toggle_darkmode"),
     url(r"^admin/", admin.site.urls),
     url(r"^i18n/", include("django.conf.urls.i18n")),
     url(r"^accounts/", include(register_patterns)),
@@ -402,6 +406,7 @@ urlpatterns = [
     ),
     url(r"^user$", user.UserAboutPage.as_view(), name="user_page"),
     url(r"^edit/profile/$", user.edit_profile, name="user_edit_profile"),
+    url(r"^user/bookmarks", user.UserBookMarkPage.as_view(), name="user_bookmark"),
     url(
         r"^user/(?P<user>\w+)",
         include(
@@ -445,6 +450,10 @@ urlpatterns = [
             ]
         ),
     ),
+    url(r"^pagevotes/upvote/$", pagevote.upvote_page, name="pagevote_upvote"),
+    url(r"^pagevotes/downvote/$", pagevote.downvote_page, name="pagevote_downvote"),
+    url(r"^bookmarks/dobookmark/$", bookmark.dobookmark_page, name="dobookmark"),
+    url(r"^bookmarks/undobookmark/$", bookmark.undobookmark_page, name="undobookmark"),
     url(r"^comments/upvote/$", comment.upvote_comment, name="comment_upvote"),
     url(r"^comments/downvote/$", comment.downvote_comment, name="comment_downvote"),
     url(r"^comments/hide/$", comment.comment_hide, name="comment_hide"),
@@ -515,6 +524,11 @@ urlpatterns = [
                     name="contest_ranking",
                 ),
                 url(
+                    r"^/final_ranking/$",
+                    contests.ContestFinalRanking.as_view(),
+                    name="contest_final_ranking",
+                ),
+                url(
                     r"^/ranking/ajax$",
                     contests.contest_ranking_ajax,
                     name="contest_ranking_ajax",
@@ -536,7 +550,7 @@ urlpatterns = [
                     ),
                 ),
                 url(
-                    r"^/submissions/(?P<user>\w+)/(?P<problem>\w+)/ajax",
+                    r"^/submissions/(?P<participation>\d+)/(?P<problem>\w+)/ajax",
                     paged_list_view(
                         submission.UserContestSubmissionsAjax,
                         "contest_user_submissions_ajax",
@@ -886,27 +900,19 @@ urlpatterns = [
                     "^language/",
                     include(
                         [
-                            url("^$", stats.language, name="language_stats"),
                             url(
-                                "^data/all/$",
-                                stats.language_data,
-                                name="language_stats_data_all",
+                                "^$",
+                                stats.StatLanguage.as_view(),
+                                name="language_stats",
                             ),
-                            url(
-                                "^data/ac/$",
-                                stats.ac_language_data,
-                                name="language_stats_data_ac",
-                            ),
-                            url(
-                                "^data/status/$",
-                                stats.status_data,
-                                name="stats_data_status",
-                            ),
-                            url(
-                                "^data/ac_rate/$",
-                                stats.ac_rate,
-                                name="language_stats_data_ac_rate",
-                            ),
+                        ]
+                    ),
+                ),
+                url(
+                    "^site/",
+                    include(
+                        [
+                            url("^$", stats.StatSite.as_view(), name="site_stats"),
                         ]
                     ),
                 ),
@@ -1098,7 +1104,11 @@ urlpatterns = [
             ]
         ),
     ),
+    url(r"^resolver/(?P<contest>\w+)", resolver.Resolver.as_view(), name="resolver"),
 ] + url_static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT)
+
+# if hasattr(settings, "INTERNAL_IPS"):
+#     urlpatterns.append(url("__debug__/", include("debug_toolbar.urls")))
 
 favicon_paths = [
     "apple-touch-icon-180x180.png",
@@ -1141,7 +1151,5 @@ handler404 = "judge.views.error.error404"
 handler403 = "judge.views.error.error403"
 handler500 = "judge.views.error.error500"
 
-if "newsletter" in settings.INSTALLED_APPS:
-    urlpatterns.append(url(r"^newsletter/", include("newsletter.urls")))
 if "impersonate" in settings.INSTALLED_APPS:
     urlpatterns.append(url(r"^impersonate/", include("impersonate.urls")))

@@ -38,11 +38,11 @@
 }
 
 .left-sidebar-item.active {
-    color: $max-color;
+    color: green;
     font-weight: bold;
-    background-color: #955cc4;
+    background-color: lightgreen;
     .sidebar-icon {
-        color: $weight-color;
+        color: green;
     }
 }
 
@@ -173,9 +173,14 @@
 }
 
 .left-sidebar-item {
+    display: flex;
+    align-items: center;
     .sidebar-icon {
-        width: 1.2em;
+        font-size: large;
         display: inline-block;
+        i {
+            width: 1.4em;
+        }
     }
 }
 .left-sidebar-item:hover {
@@ -183,7 +188,7 @@
     cursor: pointer;
 }
 .left-sidebar-item.active:hover {
-    background-color: $light-color;
+    background-color: lightgreen;
 }
 .sidebar-icon {
     color: black;
@@ -213,6 +218,7 @@
         font-family: serif;
     }
 }
+
 
 @media (max-width: 799px) {
     .left-sidebar-header {
@@ -260,15 +266,16 @@
 
     #three-col-container {
         display: flex;
+        flex-direction: column;
     }
 
     .middle-content {
-        max-width: 65%;
-        margin-left: 13%;
+        max-width: 75%;
+        width: -webkit-fill-available;
     }
 
     .blog-sidebar, .right-sidebar {
-        width: 20%;
+        width: 25%;
     }
 
     .left-sidebar {
@@ -280,7 +287,7 @@
     }
 
     .left-sidebar-item {
-        border-radius: 0 2em 2em 0;
+        border-radius: 0 0.5em 0.5em 0;
     }
 
     .feed-table {

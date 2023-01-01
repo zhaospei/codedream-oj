@@ -29,6 +29,7 @@ __all__ = [
     "ContestProblem",
     "ContestSubmission",
     "Rating",
+    "ContestProblemClarification",
 ]
 
 
@@ -125,6 +126,14 @@ class Contest(models.Model):
         null=True,
         help_text=_(
             "Format hh:mm:ss. For example, if you want a 2-hour contest, enter 02:00:00"
+        ),
+    )
+    freeze_after = models.DurationField(
+        verbose_name=_("freeze after"),
+        blank=True,
+        null=True,
+        help_text=_(
+            "Format hh:mm:ss. For example, if you want to freeze contest after 2 hours, enter 02:00:00"
         ),
     )
     is_visible = models.BooleanField(
@@ -537,7 +546,7 @@ class Contest(models.Model):
 
     @classmethod
     def get_visible_contests(cls, user, show_own_contests_only=False):
-        if not user.is_authenticated or show_own_contests_only:
+        if not user.is_authenticated:
             return (
                 cls.objects.filter(
                     is_visible=True, is_organization_private=False, is_private=False
@@ -547,9 +556,12 @@ class Contest(models.Model):
             )
 
         queryset = cls.objects.defer("description")
-        if not (
-            user.has_perm("judge.see_private_contest")
-            or user.has_perm("judge.edit_all_contest")
+        if (
+            not (
+                user.has_perm("judge.see_private_contest")
+                or user.has_perm("judge.edit_all_contest")
+            )
+            or show_own_contests_only
         ):
             q = Q(is_visible=True)
             q &= (
@@ -640,6 +652,15 @@ class ContestParticipation(models.Model):
     )
     format_data = JSONField(
         verbose_name=_("contest format specific data"), null=True, blank=True
+    )
+    format_data_final = JSONField(
+        verbose_name=_("same as format_data, but including frozen results"),
+        null=True,
+        blank=True,
+    )
+    score_final = models.FloatField(verbose_name=_("final score"), default=0)
+    cumtime_final = models.PositiveIntegerField(
+        verbose_name=_("final cumulative time"), default=0
     )
 
     def recompute_results(self):
@@ -765,6 +786,17 @@ class ContestProblem(models.Model):
             MinValueValidator(0, _("Why include a problem you " "can't submit to?"))
         ],
     )
+    frozen_subtasks = models.CharField(
+        help_text=_("Only for format new IOI. Separated by commas, e.g: 2, 3"),
+        verbose_name=_("frozen subtasks"),
+        null=True,
+        blank=True,
+        max_length=20,
+    )
+
+    @property
+    def clarifications(self):
+        return ContestProblemClarification.objects.filter(problem=self)
 
     class Meta:
         unique_together = ("problem", "contest")
@@ -853,3 +885,13 @@ class ContestMoss(models.Model):
         unique_together = ("contest", "problem", "language")
         verbose_name = _("contest moss result")
         verbose_name_plural = _("contest moss results")
+
+
+class ContestProblemClarification(models.Model):
+    problem = models.ForeignKey(
+        ContestProblem, verbose_name=_("clarified problem"), on_delete=CASCADE
+    )
+    description = models.TextField(verbose_name=_("clarification body"))
+    date = models.DateTimeField(
+        verbose_name=_("clarification timestamp"), auto_now_add=True
+    )

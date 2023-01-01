@@ -2,10 +2,12 @@
 
 {% block content_js_media %}
     {% include "comments/media-js.html" %}
+    {% include "actionbar/media-js.html" %}
 {% endblock %}
 
 {% block content_media %}
     {% include "comments/media-css.html" %}
+    {% include "actionbar/media-css.html" %}
 {% endblock %}
 
 {% block header %}
@@ -26,9 +28,11 @@
                 <p>Authors: {{ link_users(authors) }}</p>
             {% endif %}
         {% endwith %}
-        {{ solution.content|markdown('solution', MATH_ENGINE)|reference|str|safe }}
+        {{ solution.content|markdown|reference|str|safe }}
     </div>
     <hr>
+    {% include "actionbar/list.html" %}
+    <br>
     {% include "comments/list.html" %}
 {% endblock %}
 

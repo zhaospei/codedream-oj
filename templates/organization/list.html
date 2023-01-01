@@ -2,24 +2,10 @@
 
 {% block two_col_media %}
     <style>
-        .organization-row {
-            display: block;
-            padding: 0.5em;
-            border-bottom: 1px gray solid;
-            border-top: none;            
-            color: black;
-            font-weight: bold;
-        }
         .organization-container .organization-row:last-child {
             border-bottom: none;
         }
-        .organization-row:hover {
-            background-color: #f3f3f3;
-        }
-        .organization-container {
-            border: 1px gray solid;
-            margin-bottom: 3em;
-        }
+        
         .org-logo {
             vertical-align: middle;
             height: 2em;
@@ -46,9 +32,9 @@
         <div class="organization-container toggled">
             {% for org in queryset %}
                 <a href="{{ org.get_absolute_url() }}" class="organization-row" title="{{org.about}}">
-                    <img class="org-logo" src="{{ org.logo_override_image or static('icons/icon.png') }}">
-                    <span>{{ org.name }}</span>
-                    <span style="font-weight: normal; float:right"><i>{{ org.member_count }} {{_('members')}}</i></span>
+                    <img class="org-logo" data-src="{{ org.logo_override_image or static('icons/icon.png') }}">
+                    <span style="margin-right: auto">{{ org.name }}</span>
+                    <span style="font-weight: normal"><i>{{ org.member_count }} {{_('members')}}</i></span>
                 </a>
             {% endfor %}
         </div>

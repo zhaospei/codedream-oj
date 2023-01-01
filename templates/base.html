@@ -11,7 +11,7 @@
     {% endif %}
     <meta id="viewport" name="viewport" content="width=device-width, initial-scale=1">
     <!-- Favicons-->
-    <!-- <link rel="apple-touch-icon" sizes="57x57" href="/apple-touch-icon-57x57.png">
+    <link rel="apple-touch-icon" sizes="57x57" href="/apple-touch-icon-57x57.png">
     <link rel="apple-touch-icon" sizes="60x60" href="/apple-touch-icon-60x60.png">
     <link rel="apple-touch-icon" sizes="72x72" href="/apple-touch-icon-72x72.png">
     <link rel="apple-touch-icon" sizes="76x76" href="/apple-touch-icon-76x76.png">
@@ -19,14 +19,14 @@
     <link rel="apple-touch-icon" sizes="120x120" href="/apple-touch-icon-120x120.png">
     <link rel="apple-touch-icon" sizes="144x144" href="/apple-touch-icon-144x144.png">
     <link rel="apple-touch-icon" sizes="152x152" href="/apple-touch-icon-152x152.png">
-    <link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon-180x180.png"> -->
-    <link rel="icon" type="image/png" href="/favicon-32x32.png">
-    <!--  <link rel="icon" type="image/png" href="/android-chrome-192x192.png" sizes="192x192">
+    <link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon-180x180.png">
+    <link rel="icon" type="image/png" href="/favicon-32x32.png" sizes="32x32">
+    <link rel="icon" type="image/png" href="/android-chrome-192x192.png" sizes="192x192">
     <link rel="icon" type="image/png" href="/favicon-96x96.png" sizes="96x96">
     <link rel="icon" type="image/png" href="/favicon-16x16.png" sizes="16x16">
     <link rel="manifest" href="/manifest.json">
     <meta name="msapplication-TileColor" content="#FFBB33">
-    <meta name="msapplication-TileImage" content="/mstile-144x144.png"> -->
+    <meta name="msapplication-TileImage" content="/mstile-144x144.png">
     {# Chrome 39 for Android colour #}
     <meta name="theme-color" content="#FFBB33">
     {% if og_image %}
@@ -47,6 +47,7 @@
     {% if not INLINE_FONTAWESOME %}
         <link rel="stylesheet" href="{{ FONTAWESOME_CSS }}">
     {% endif %}
+    <link rel="stylesheet" type="text/css" href="{{ static('markdown.css') }}">
     {% compress css %}
         <link rel="stylesheet" href="{{ static('style.css') }}">
         {% if PYGMENT_THEME %}
@@ -68,10 +69,16 @@
         </style>
     {% endif %}
     {% block media %}{% endblock %}
+    {% if use_darkmode %}
+        {% compress css %}
+            <link rel="stylesheet" href="{{ static('darkmode.css') }}">
+            <link rel="stylesheet" href="{{ static('darkmode-svg.css') }}">
+        {% endcompress %}
+    {% endif %}
     {% if not INLINE_JQUERY %}
         <script src="{{ JQUERY_JS }}"></script>
     {% endif %}
-
+    <script src="https://unpkg.com/@popperjs/core@2"></script>
     {% compress js %}
         <script>{{ inlinei18n(LANGUAGE_CODE)|safe }}</script>
         {% if INLINE_JQUERY %}
@@ -84,14 +91,15 @@
         <script src="{{ static('libs/select2/select2.js') }}"></script>
         {% include "extra_js.html" %}
         <script src="{{ static('common.js') }}"></script>
+        <script src="{{ static('libs/clipboard/tooltip.js') }}"></script>
         <script>
             moment.locale('{{ LANGUAGE_CODE }}');
             $(function () {
                 $('img.unveil').unveil(200);
             });
+            const loading_page = `{% include "loading-page.html" %}`;
         </script>
     {% endcompress %}
-    <script src="https://unpkg.com/@popperjs/core@2"></script>
 
     {% block js_media %}{% endblock %}
     {% if request.in_contest %}
@@ -111,8 +119,8 @@
                 return false;
             });
 
-            if (localStorage.getItem("contest_timer_pos")) {
-                data = localStorage.getItem("contest_timer_pos").split(":");
+            if (localStorage.getItem("contest_timer_position")) {
+                data = localStorage.getItem("contest_timer_position").split(":");
                 $("#contest-info").css({
                     left: data[0],
                     top: data[1]
@@ -130,14 +138,13 @@
             $(document).mousemove(function (e) {
                 x_pos = e.screenX;
                 y_pos = e.screenY;
-                x_pos = Math.max(Math.min(x_pos, window.innerWidth), 0);
-                y_pos = Math.max(Math.min(y_pos, window.innerHeight), 0);
-
+                
                 if (selected !== null) {
-                    left_px = (x_pos - x_elem) + 'px';
-                    top_px = (y_pos - y_elem) + 'px';
-
-                    localStorage.setItem("contest_timer_pos", left_px + ":" + top_px);
+                    left_px = (x_pos - x_elem);
+                    top_px = (y_pos - y_elem);
+                    left_px = Math.max(Math.min(left_px, window.innerWidth), 0) / window.innerWidth * 100 + '%';
+                    top_px = Math.max(Math.min(top_px, window.innerHeight), 0) / window.innerHeight * 100 + '%';
+                    localStorage.setItem("contest_timer_position", left_px + ":" + top_px);
 
                     selected.css({
                         left: left_px,
@@ -173,21 +180,6 @@
     {% if request.user.is_authenticated and request.profile.user_script and not request.user.is_impersonate %}
         <script type="text/javascript">{{ request.profile.user_script|safe }}</script>
     {% endif %}
-
-    <script>
-        $(function() {
-            const popperInstance = Popper.createPopper($('#nav-lang-icon'), $('#lang-dropdown'));
-            $('#nav-lang-icon').click(function(e) {
-                e.preventDefault();
-                $('#lang-dropdown').toggle();
-                popperInstance.update();
-            })
-            $('.lang-dropdown-item').click(function() {
-                $('select[name="language"]').val($(this).attr('value'));
-                $('#form-lang').submit();
-            })
-        });
-    </script>
 
     <noscript>
         <style>
@@ -228,7 +220,7 @@
                 </li>
             {% endfor %}
         </ul>
-        <div style="float: right; display: inline; font-size: larger;">
+        <div style="float: right; display: inline-flex; font-size: larger; align-items: center; height: 100%;">
             <span class="navbar-icons">
                 {% if request.user.is_authenticated %}
                 <span title="{{_('Chat')}}">
@@ -250,65 +242,63 @@
                 </span>
                 {% endif %}
                 <span title="{{_('Language')}}">
-                    <a href="#" class="icofont-globe navbar-icon" id="nav-lang-icon" aria-hidden="true">
+                    <a class="icofont-globe navbar-icon" id="nav-lang-icon" aria-hidden="true">
                     <sub class="sub-lang">{{LANGUAGE_CODE}}</sub>
                     </a>
-                    <div id="lang-dropdown" role="tooltip">
+                    <div id="lang-dropdown" class="dropdown" role="tooltip">
                         {% for language in language_info_list(LANGUAGES) %}
-                            <div value="{{ language.code }}" class="lang-dropdown-item" style="{{'font-weight: bold' if language.code == LANGUAGE_CODE}}">
+                            <div value="{{ language.code }}" 
+                            class="dropdown-item lang-dropdown-item" style="{{'font-weight: bold' if language.code == LANGUAGE_CODE}}">
                                 {{ language.name_local }}
                             </div>
                         {% endfor %}
                     </div>
                 </span>
+                <span title="{{_('Dark Mode')}}">
+                    <a class="icofont-adjust navbar-icon black" id="nav-darkmode-icon" aria-hidden="true" href="?darkmode=1"></a>
+                </span>
             </span>
-            <span id="user-links">
-                {% if request.user.is_authenticated %}
-                    <ul>
-                        <li>
-                            <a href="{{ url('user_page') }}">
-                                <span>
-                                    <img src="{{ gravatar(request.user, 32) }}" height="24" width="24">{# -#}
-                                    <span>
-                                        {%- trans username=request.user.username -%}
-                                            Hello, <b>{{ username }}</b>.
-                                        {%- endtrans %}
-                                    </span>
-                                </span>
-                            </a>
-                            <ul style="width: 150px">
-                                {% if request.user.is_staff or request.user.is_superuser %}
-                                    <li><a href="{{ url('admin:index') }}">{{ _('Admin') }}</a></li>
-                                {% endif %}
-                                {% if request.user.is_superuser %}
-                                    <li><a href="{{ url('internal_problem') }}">{{ _('Internal') }}</a></li>
-                                {% endif %}
-                                <li><a href="{{ url('user_edit_profile') }}">{{ _('Edit profile') }}</a></li>
-                                {% if request.user.is_impersonate %}
-                                    <li><a href="{{ url('impersonate-stop') }}">Stop impersonating</a></li>
-                                {% else %}
-                                    <li>
-                                        <form action="{{ url('auth_logout') }}" method="POST">
-                                            {% csrf_token %}
-                                            <button type="submit" style="color: red !important">{{ _('Log out') }}</button>
-                                        </form>
-                                    </li>
-                                {% endif %}
-                            </ul>
-                        </li>
-                    </ul>
-                {% else %}
-                    <span class="anon">
-                        <a href="{{ url('auth_login') }}?next={{ LOGIN_RETURN_PATH|urlencode }}"><b>{{ _('Log in') }}</b></a>
-                        <!-- &nbsp;{{ _('or') }}&nbsp; -->
-                        <!-- <a href="{{ url('registration_register') }}"><b>{{ _('Sign up') }}</b></a> -->
-                    </span>
-                {% endif %}
-            </span>
+            {% if request.user.is_authenticated %}
+                <span id="user-links">
+                    <ul><li><a href="javascript:void(0)">
+                        <span>
+                            <img src="{{ gravatar(request.user, 32) }}" height="24" width="24">{# -#}
+                            <span>
+                                <b class="{{request.profile.css_class}}">{{ request.user.username }}</b>
+                            </span>
+                        </span>
+                    </a></li></ul>
+                </span>
+                <div class="dropdown" id="userlink_dropdown" role="tooptip">
+                    <div class="dropdown-item"><a href="{{ url('user_page') }}">{{ _('Profile') }}</a></div>
+                    {% if request.user.is_staff or request.user.is_superuser %}
+                        <div class="dropdown-item"><a href="{{ url('admin:index') }}">{{ _('Admin') }}</a></div>
+                    {% endif %}
+                    {% if request.user.is_superuser %}
+                        <div class="dropdown-item"><a href="{{ url('internal_problem') }}">{{ _('Internal') }}</a></div>
+                        <div class="dropdown-item"><a href="{{ url('site_stats') }}">{{ _('Stats') }}</a></div>
+                    {% endif %}
+                    <div class="dropdown-item"><a href="{{ url('user_edit_profile') }}">{{ _('Edit profile') }}</a></div>
+                    {% if request.user.is_impersonate %}
+                        <div class="dropdown-item"><a href="{{ url('impersonate-stop') }}">Stop impersonating</a></div>
+                    {% else %}
+                        <div class="dropdown-item">
+                            <a href="#" id="logout" class="red">{{ _('Log out') }}</a>
+                            <form id="logout-form" action="{{ url('auth_logout') }}" method="POST">
+                                {% csrf_token %}
+                            </form>
+                        </div>
+                    {% endif %}
+                </div>
+            {% else %}
+                <span class="anon">
+                    <a href="{{ url('auth_login') }}?next={{ LOGIN_RETURN_PATH|urlencode }}"><b>{{ _('Log in') }}</b></a>
+                    &nbsp;{{ _('or') }}&nbsp;
+                    <a href="{{ url('registration_register') }}"><b>{{ _('Sign up') }}</b></a>
+                </span>
+            {% endif %}
         </div>
-        
     </div>
-
     <div id="nav-shadow"></div>
 </nav>
 {% if request.in_contest %}
@@ -329,9 +319,9 @@
         </div>
         <div id="contest-info-toggle" class="{{'contest-info-toggle-mode-on' if request.contest_mode else 'contest-info-toggle-mode-off'}}">
             {% if request.contest_mode %}
-                <i class="fa fa-toggle-on" style="color: white"></i> {{_('Compete')}}
+                <i class="fa fa-toggle-on white"></i> {{_('Compete')}}
             {% else %}
-                <i class="fa fa-toggle-off" style="color: white"></i> {{_('General')}}
+                <i class="fa fa-toggle-off white"></i> {{_('General')}}
             {% endif %}
         </div>
     </div>
@@ -343,7 +333,7 @@
     <br>
     <main id="content">
         {% block title_row %}
-            <h2 style="color:#393630; display:inline">
+            <h2 class="title-row">
                 {% block content_title %}
                     {% if content_title %}{{ content_title }}{% else %}{{ title }}{% endif %}
                 {% endblock %}
@@ -365,7 +355,7 @@
     <footer>
         <span id="footer-content">
             <br>
-            <a style="color: #808080" target="_blank" href="https://dmoj.ca">proudly powered by <b>DMOJ</b></a><a target="_blank" href="https://github.com/LQDJudge/online-judge"> | developed by LQDJudge team</a> |
+            <a class="background-footer" target="_blank" href="https://dmoj.ca">proudly powered by <b>DMOJ</b></a><a target="_blank" href="https://github.com/LQDJudge/online-judge"> | developed by LQDJudge team</a> |
             {% if i18n_config.footer %}
                 {{ i18n_config.footer|safe }} |
             {% endif %}

@@ -6,8 +6,7 @@ from django.contrib.contenttypes.fields import GenericRelation
 from django.core.cache import cache
 from django.core.validators import MaxValueValidator, MinValueValidator, RegexValidator
 from django.db import models
-from django.db.models import CASCADE, F, Q, QuerySet, SET_NULL
-from django.db.models.expressions import RawSQL
+from django.db.models import CASCADE, F, FilteredRelation, Q, SET_NULL
 from django.db.models.functions import Coalesce
 from django.urls import reverse
 from django.utils.functional import cached_property
@@ -17,7 +16,6 @@ from judge.fulltext import SearchQuerySet
 from judge.models.profile import Organization, Profile
 from judge.models.runtime import Language
 from judge.user_translations import gettext as user_gettext
-from judge.utils.raw_sql import RawSQLColumn, unique_together_left_join
 from judge.models.problem_data import (
     problem_data_storage,
     problem_directory_file_helper,
@@ -28,11 +26,9 @@ __all__ = [
     "ProblemType",
     "Problem",
     "ProblemTranslation",
-    "ProblemClarification",
     "License",
     "Solution",
     "TranslatedProblemQuerySet",
-    "TranslatedProblemForeignKeyQuerySet",
 ]
 
 
@@ -113,41 +109,16 @@ class TranslatedProblemQuerySet(SearchQuerySet):
         )
 
     def add_i18n_name(self, language):
-        queryset = self._clone()
-        alias = unique_together_left_join(
-            queryset, ProblemTranslation, "problem", "language", language
-        )
-        return queryset.annotate(
+        return self.annotate(
+            i18n_translation=FilteredRelation(
+                "translations",
+                condition=Q(translations__language=language),
+            )
+        ).annotate(
             i18n_name=Coalesce(
-                RawSQL("%s.name" % alias, ()),
-                F("name"),
-                output_field=models.CharField(),
+                F("i18n_translation__name"), F("name"), output_field=models.CharField()
             )
         )
-
-
-class TranslatedProblemForeignKeyQuerySet(QuerySet):
-    def add_problem_i18n_name(self, key, language, name_field=None):
-        queryset = (
-            self._clone() if name_field is None else self.annotate(_name=F(name_field))
-        )
-        alias = unique_together_left_join(
-            queryset,
-            ProblemTranslation,
-            "problem",
-            "language",
-            language,
-            parent_model=Problem,
-        )
-        # You must specify name_field if Problem is not yet joined into the QuerySet.
-        kwargs = {
-            key: Coalesce(
-                RawSQL("%s.name" % alias, ()),
-                F(name_field) if name_field else RawSQLColumn(Problem, "name"),
-                output_field=models.CharField(),
-            )
-        }
-        return queryset.annotate(**kwargs)
 
 
 class Problem(models.Model):
@@ -490,10 +461,6 @@ class Problem(models.Model):
     def i18n_name(self, value):
         self._i18n_name = value
 
-    @property
-    def clarifications(self):
-        return ProblemClarification.objects.filter(problem=self)
-
     def update_stats(self):
         self.user_count = (
             self.submission_set.filter(
@@ -611,16 +578,6 @@ class ProblemTranslation(models.Model):
         unique_together = ("problem", "language")
         verbose_name = _("problem translation")
         verbose_name_plural = _("problem translations")
-
-
-class ProblemClarification(models.Model):
-    problem = models.ForeignKey(
-        Problem, verbose_name=_("clarified problem"), on_delete=CASCADE
-    )
-    description = models.TextField(verbose_name=_("clarification body"))
-    date = models.DateTimeField(
-        verbose_name=_("clarification timestamp"), auto_now_add=True
-    )
 
 
 class LanguageLimit(models.Model):

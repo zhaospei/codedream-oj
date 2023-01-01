@@ -7,7 +7,6 @@
 {% block js_media %}
     {% compress js %}
         <script src="{{ static('libs/clipboard/clipboard.js') }}"></script>
-        <script src="{{ static('libs/clipboard/tooltip.js') }}"></script>
         <script type="text/javascript">
             $(function () {
                 var info_float = $('.info-float');
@@ -67,8 +66,8 @@
                 {% block description_end %}
                     <hr>
                 {% endblock %}
-                {% block post_description_end %}{% endblock %}
             </div>
+            {% block post_description_end %}{% endblock %}
             {% block comments %}{% endblock %}
         </div>
     </div>

@@ -33,7 +33,7 @@ from django.views.generic import ListView
 
 from judge import event_poster as event
 from judge.highlight_code import highlight_code
-from judge.models import Contest
+from judge.models import Contest, ContestParticipation
 from judge.models import Language
 from judge.models import Problem
 from judge.models import ProblemTestCase
@@ -49,6 +49,9 @@ from judge.utils.raw_sql import join_sql_subquery, use_straight_join
 from judge.utils.views import DiggPaginatorMixin
 from judge.utils.views import TitleMixin
 from judge.utils.timedelta import nice_repr
+
+
+MAX_NUMBER_OF_QUERY_SUBMISSIONS = 50000
 
 
 def submission_related(queryset):
@@ -158,8 +161,8 @@ class SubmissionSource(SubmissionDetailBase):
 def make_batch(batch, cases):
     result = {"id": batch, "cases": cases}
     if batch:
-        result["points"] = min(map(attrgetter("points"), cases))
-        result["total"] = max(map(attrgetter("total"), cases))
+        result["points"] = sum(map(attrgetter("points"), cases))
+        result["total"] = sum(map(attrgetter("total"), cases))
     return result
 
 
@@ -223,9 +226,22 @@ class SubmissionStatus(SubmissionDetailBase):
             return True
         return False
 
+    def get_frozen_subtasks(self):
+        if self.request.user.is_superuser:
+            return set()
+        submission = self.object
+        contest = submission.contest_object
+        if contest and contest.format_name == "ioi16":
+            contest_problem = contest.contest_problems.get(problem=submission.problem)
+            return contest.format.get_frozen_subtasks().get(
+                str(contest_problem.id), set()
+            )
+        return set()
+
     def get_context_data(self, **kwargs):
         context = super(SubmissionStatus, self).get_context_data(**kwargs)
         submission = self.object
+
         context["last_msg"] = event.last()
         context["batches"] = group_test_cases(submission.test_cases.all())
         context["time_limit"] = submission.problem.time_limit
@@ -234,6 +250,7 @@ class SubmissionStatus(SubmissionDetailBase):
         context["highlighted_source"] = highlight_code(
             submission.source.source, submission.language.pygments, linenos=False
         )
+        context["frozen_subtasks"] = self.get_frozen_subtasks()
 
         contest = submission.contest_or_none
         prefix_length = 0
@@ -298,6 +315,7 @@ class SubmissionsListBase(DiggPaginatorMixin, TitleMixin, ListView):
     template_name = "submission/list.html"
     context_object_name = "submissions"
     first_page_href = None
+    include_frozen = False
 
     def get_result_data(self):
         result = self._get_result_data()
@@ -306,7 +324,7 @@ class SubmissionsListBase(DiggPaginatorMixin, TitleMixin, ListView):
         return result
 
     def _get_result_data(self):
-        return get_result_data(self.get_queryset().order_by())
+        return get_result_data(self._get_queryset().order_by())
 
     def access_check(self, request):
         pass
@@ -323,7 +341,7 @@ class SubmissionsListBase(DiggPaginatorMixin, TitleMixin, ListView):
     def contest(self):
         return self.request.profile.current_contest.contest
 
-    def _get_queryset(self):
+    def _get_entire_queryset(self):
         queryset = Submission.objects.all()
         use_straight_join(queryset)
         queryset = submission_related(queryset.order_by("-id"))
@@ -341,6 +359,16 @@ class SubmissionsListBase(DiggPaginatorMixin, TitleMixin, ListView):
             queryset = queryset.filter(contest_object=self.contest)
             if not self.contest.can_see_full_scoreboard(self.request.user):
                 queryset = queryset.filter(user=self.request.profile)
+            if (
+                self.contest.format_name == "ioi16"
+                and not self.request.user.is_superuser
+            ):
+                queryset = queryset.filter(user=self.request.profile)
+            if self.contest.freeze_after and not self.include_frozen:
+                queryset = queryset.exclude(
+                    ~Q(user=self.request.profile),
+                    date__gte=self.contest.freeze_after + self.contest.start_time,
+                )
         else:
             queryset = queryset.select_related("contest_object").defer(
                 "contest_object__description"
@@ -374,8 +402,8 @@ class SubmissionsListBase(DiggPaginatorMixin, TitleMixin, ListView):
 
         return queryset
 
-    def get_queryset(self):
-        queryset = self._get_queryset()
+    def _get_queryset(self):
+        queryset = self._get_entire_queryset()
         if not self.in_contest:
             join_sql_subquery(
                 queryset,
@@ -388,8 +416,12 @@ class SubmissionsListBase(DiggPaginatorMixin, TitleMixin, ListView):
                 params=[],
                 join_fields=[("problem_id", "id")],
                 alias="visible_problems",
+                related_model=Problem,
             )
         return queryset
+
+    def get_queryset(self):
+        return self._get_queryset()[:MAX_NUMBER_OF_QUERY_SUBMISSIONS]
 
     def get_my_submissions_page(self):
         return None
@@ -449,6 +481,9 @@ class SubmissionsListBase(DiggPaginatorMixin, TitleMixin, ListView):
         self.selected_languages = set(request.GET.getlist("language"))
         self.selected_statuses = set(request.GET.getlist("status"))
 
+        if request.user.is_superuser:
+            self.include_frozen = True
+
         if "results" in request.GET:
             return JsonResponse(self.get_result_data())
 
@@ -457,10 +492,19 @@ class SubmissionsListBase(DiggPaginatorMixin, TitleMixin, ListView):
 
 class UserMixin(object):
     def get(self, request, *args, **kwargs):
-        if "user" not in kwargs:
-            raise ImproperlyConfigured("Must pass a user")
-        self.profile = get_object_or_404(Profile, user__username=kwargs["user"])
-        self.username = kwargs["user"]
+        if "user" not in kwargs and "participation" not in kwargs:
+            raise ImproperlyConfigured("Must pass a user or participation")
+        if "user" in kwargs:
+            self.profile = get_object_or_404(Profile, user__username=kwargs["user"])
+            self.username = kwargs["user"]
+        else:
+            self.participation = get_object_or_404(
+                ContestParticipation, id=kwargs["participation"]
+            )
+            self.profile = self.participation.user
+            self.username = self.profile.user.username
+        if self.profile == request.profile:
+            self.include_frozen = True
         return super(UserMixin, self).get(request, *args, **kwargs)
 
 
@@ -476,10 +520,10 @@ class ConditionalUserTabMixin(object):
 
 
 class AllUserSubmissions(ConditionalUserTabMixin, UserMixin, SubmissionsListBase):
-    def get_queryset(self):
+    def _get_queryset(self):
         return (
             super(AllUserSubmissions, self)
-            .get_queryset()
+            ._get_queryset()
             .filter(user_id=self.profile.id)
         )
 
@@ -516,7 +560,7 @@ class ProblemSubmissionsBase(SubmissionsListBase):
     dynamic_update = True
     check_contest_in_access_check = False
 
-    def get_queryset(self):
+    def _get_queryset(self):
         if (
             self.in_contest
             and not self.contest.contest_problems.filter(
@@ -526,7 +570,7 @@ class ProblemSubmissionsBase(SubmissionsListBase):
             raise Http404()
         return (
             super(ProblemSubmissionsBase, self)
-            ._get_queryset()
+            ._get_entire_queryset()
             .filter(problem_id=self.problem.id)
         )
 
@@ -608,10 +652,10 @@ class UserProblemSubmissions(ConditionalUserTabMixin, UserMixin, ProblemSubmissi
         if not self.is_own:
             self.access_check_contest(request)
 
-    def get_queryset(self):
+    def _get_queryset(self):
         return (
             super(UserProblemSubmissions, self)
-            .get_queryset()
+            ._get_queryset()
             .filter(user_id=self.profile.id)
         )
 
@@ -811,6 +855,68 @@ class UserContestSubmissionsAjax(UserContestSubmissions):
             return s.date - self.contest.start_time
         return None
 
+    def get_best_subtask_points(self):
+        if self.contest.format_name == "ioi16":
+            contest_problem = self.contest.contest_problems.get(problem=self.problem)
+            best_subtasks = {}
+            total_points = 0
+            problem_points = 0
+            achieved_points = 0
+            frozen_subtasks = self.contest.format.get_frozen_subtasks()
+
+            for (
+                problem_id,
+                pp,
+                time,
+                subtask_points,
+                total_subtask_points,
+                subtask,
+                sub_id,
+            ) in self.contest.format.get_results_by_subtask(
+                self.participation, self.include_frozen
+            ):
+                if contest_problem.id != problem_id or total_subtask_points == 0:
+                    continue
+                if not subtask:
+                    subtask = 0
+                problem_points = pp
+                submission = Submission.objects.get(id=sub_id)
+                if (
+                    subtask in frozen_subtasks.get(str(problem_id), set())
+                    and not self.request.user.is_superuser
+                ):
+                    best_subtasks[subtask] = {
+                        "submission": None,
+                        "contest_time": None,
+                        "points": "???",
+                        "total": total_subtask_points,
+                    }
+                else:
+                    best_subtasks[subtask] = {
+                        "submission": submission,
+                        "contest_time": nice_repr(
+                            self.contest_time(submission), "noday"
+                        ),
+                        "points": subtask_points,
+                        "total": total_subtask_points,
+                    }
+                    achieved_points += subtask_points
+                total_points += total_subtask_points
+            for subtask in best_subtasks.values():
+                if subtask["points"] != "???":
+                    subtask["points"] = floatformat(
+                        subtask["points"] / total_points * problem_points,
+                        -self.contest.points_precision,
+                    )
+                subtask["total"] = floatformat(
+                    subtask["total"] / total_points * problem_points,
+                    -self.contest.points_precision,
+                )
+            if total_points > 0 and best_subtasks:
+                achieved_points = achieved_points / total_points * problem_points
+                return best_subtasks, achieved_points, problem_points
+        return None
+
     def get_context_data(self, **kwargs):
         context = super(UserContestSubmissionsAjax, self).get_context_data(**kwargs)
         context["contest"] = self.contest
@@ -821,15 +927,43 @@ class UserContestSubmissionsAjax(UserContestSubmissions):
         )
 
         contest_problem = self.contest.contest_problems.get(problem=self.problem)
-        for s in context["submissions"]:
-            contest_time = self.contest_time(s)
-            if contest_time:
-                s.contest_time = nice_repr(contest_time, "noday")
-            else:
-                s.contest_time = None
-            points = floatformat(s.contest.points, -self.contest.points_precision)
-            total = floatformat(contest_problem.points, -self.contest.points_precision)
-            s.display_point = f"{points} / {total}"
+        filtered_submissions = []
+
+        # Only show this for some users when using ioi16
+        if self.contest.format_name != "ioi16" or self.request.user.is_superuser:
+            for s in context["submissions"]:
+                if not hasattr(s, "contest"):
+                    continue
+                contest_time = self.contest_time(s)
+                if contest_time:
+                    s.contest_time = nice_repr(contest_time, "noday")
+                else:
+                    s.contest_time = None
+                total = floatformat(
+                    contest_problem.points, -self.contest.points_precision
+                )
+                points = floatformat(s.contest.points, -self.contest.points_precision)
+                s.display_point = f"{points} / {total}"
+                filtered_submissions.append(s)
+            context["submissions"] = filtered_submissions
+        else:
+            context["submissions"] = None
+
+        best_subtasks = self.get_best_subtask_points()
+        if best_subtasks:
+            (
+                context["best_subtasks"],
+                context["points"],
+                context["total"],
+            ) = best_subtasks
+            if context["points"] != "???":
+                context["points"] = floatformat(
+                    context["points"], -self.contest.points_precision
+                )
+            context["total"] = floatformat(
+                context["total"], -self.contest.points_precision
+            )
+            context["subtasks"] = sorted(context["best_subtasks"].keys())
         return context
 
     def get(self, request, *args, **kwargs):

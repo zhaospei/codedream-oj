@@ -15,6 +15,7 @@ from judge.models.contest import (
     ContestSubmission,
     ContestTag,
     Rating,
+    ContestProblemClarification,
 )
 from judge.models.interface import BlogPost, MiscConfig, NavigationBar, validate_regex
 from judge.models.message import PrivateMessage, PrivateMessageThread
@@ -23,12 +24,10 @@ from judge.models.problem import (
     LanguageTemplate,
     License,
     Problem,
-    ProblemClarification,
     ProblemGroup,
     ProblemTranslation,
     ProblemType,
     Solution,
-    TranslatedProblemForeignKeyQuerySet,
     TranslatedProblemQuerySet,
     ProblemPointsVote,
 )
@@ -39,7 +38,13 @@ from judge.models.problem_data import (
     problem_data_storage,
     problem_directory_file,
 )
-from judge.models.profile import Organization, OrganizationRequest, Profile, Friend
+from judge.models.profile import (
+    Organization,
+    OrganizationRequest,
+    Profile,
+    Friend,
+    OrganizationProfile,
+)
 from judge.models.runtime import Judge, Language, RuntimeVersion
 from judge.models.submission import (
     SUBMISSION_RESULT,
@@ -49,6 +54,8 @@ from judge.models.submission import (
 )
 from judge.models.ticket import Ticket, TicketMessage
 from judge.models.volunteer import VolunteerProblemVote
+from judge.models.pagevote import PageVote, PageVoteVoter
+from judge.models.bookmark import BookMark, MakeBookMark
 
 revisions.register(Profile, exclude=["points", "last_access", "ip", "rating"])
 revisions.register(Problem, follow=["language_limits"])
@@ -71,5 +78,7 @@ revisions.register(ProblemData)
 revisions.register(ProblemTestCase)
 revisions.register(ContestParticipation)
 revisions.register(Rating)
+revisions.register(PageVoteVoter)
 revisions.register(VolunteerProblemVote)
+revisions.register(MakeBookMark)
 del revisions

@@ -42,7 +42,6 @@ class Message(models.Model):
         super(Message, self).save(*args, **kwargs)
 
     class Meta:
-        app_label = "chat_box"
         verbose_name = "message"
         verbose_name_plural = "messages"
         ordering = ("-time",)
@@ -54,6 +53,9 @@ class UserRoom(models.Model):
         Room, verbose_name="room id", on_delete=CASCADE, default=None, null=True
     )
     last_seen = models.DateTimeField(verbose_name=_("last seen"), auto_now_add=True)
+
+    class Meta:
+        unique_together = ("user", "room")
 
 
 class Ignore(models.Model):

@@ -19,10 +19,6 @@
             height: 70px
         }
 
-        .grayed {
-            color: #666;
-        }
-
         .inline-header {
             float: left;
             font-size: 1.1em;
@@ -31,7 +27,6 @@
         }
 
         .block-header {
-            color: #666;
             font-size: 1.1em;
         }
 
@@ -93,25 +88,17 @@
             {% endif %}
 
             {% csrf_token %}
-            
-            <table>
-                <tr>
-                    <td><div class="block-header">{{ _('Fullname') }}:</div></td>
-                </tr>
-                <tr>
-                    <td>{{ form_user.first_name }}</td>                
-                </tr>
-            </table>
-            <hr>
 
-            <table>
+            <table class="block-header grayed">
                 <tr>
-                    <td><div class="block-header">{{ _('Email') }}:</div></td>
+                  <td> {{ _('Fullname') }}: </td>
+                  <td> {{ form_user.first_name }} </td>
                 </tr>
                 <tr>
-                    <td>{{ form_user.email }}</td>                
+                    <td> {{ _('School') }}: </td>
+                    <td> {{ form_user.last_name }} </td>
                 </tr>
-            </table>
+              </table>
             <hr>
 
             <div style="padding-top:0.5em" class="block-header">{{ _('Self-description') }}:</div>
@@ -140,24 +127,6 @@
                                     <td><span class="fullwidth">{{ form.math_engine }}</span></td>
                                 </tr>
                             {% endif %}
-                            {% if form.newsletter %}
-                                <tr>
-                                    <td colspan="2">
-                                        {{ form.newsletter }}
-                                        <label for="id_newsletter" style="float: unset" class="inline-header grayed">
-                                            {{- _('Notify me about upcoming contests') -}}
-                                        </label>
-                                    </td>
-                                </tr>
-                            {% endif %}
-                            <tr>
-                                <td colspan="2">
-                                    {{ form.test_site }}
-                                    <label for="id_test_site" style="float: unset" class="inline-header grayed">
-                                        {{- form.test_site.label -}}
-                                    </label>
-                                </td>
-                            </tr>
                             <tr>
                                 <td colspan="2">
                                     <a href="http://www.gravatar.com/" title="{{ _('Change your avatar') }}"

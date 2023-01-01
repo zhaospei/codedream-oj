@@ -1,3 +1,4 @@
+from copy import deepcopy
 import json
 import math
 from calendar import Calendar, SUNDAY
@@ -65,7 +66,7 @@ from judge.models import (
     Problem,
     Profile,
     Submission,
-    ProblemClarification,
+    ContestProblemClarification,
 )
 from judge.tasks import run_moss
 from judge.utils.celery import redirect_to_task_status
@@ -81,6 +82,9 @@ from judge.utils.views import (
     generic_message,
 )
 from judge.widgets import HeavyPreviewPageDownWidget
+from judge.views.pagevote import PageVoteDetailView
+from judge.views.bookmark import BookMarkDetailView
+
 
 __all__ = [
     "ContestList",
@@ -287,11 +291,11 @@ class ContestMixin(object):
             metadata = generate_opengraph(
                 "generated-meta-contest:%d" % self.object.id,
                 self.object.description,
-                "contest",
             )
         context["meta_description"] = self.object.summary or metadata[0]
         context["og_image"] = self.object.og_image or metadata[1]
         context["has_moss_api_key"] = settings.MOSS_API_KEY is not None
+        context["can_use_resolver"] = self.object.format_name == "ioi16"
         context["logo_override_image"] = self.object.logo_override_image
         if (
             not context["logo_override_image"]
@@ -380,7 +384,13 @@ class ContestMixin(object):
             )
 
 
-class ContestDetail(ContestMixin, TitleMixin, CommentedDetailView):
+class ContestDetail(
+    ContestMixin,
+    TitleMixin,
+    CommentedDetailView,
+    PageVoteDetailView,
+    BookMarkDetailView,
+):
     template_name = "contest/contest.html"
 
     def get_comment_page(self):
@@ -418,13 +428,13 @@ class ContestClone(
     permission_required = "judge.clone_contest"
 
     def form_valid(self, form):
-        contest = self.object
+        tags = self.object.tags.all()
+        organizations = self.object.organizations.all()
+        private_contestants = self.object.private_contestants.all()
+        view_contest_scoreboard = self.object.view_contest_scoreboard.all()
+        contest_problems = self.object.contest_problems.all()
 
-        tags = contest.tags.all()
-        organizations = contest.organizations.all()
-        private_contestants = contest.private_contestants.all()
-        view_contest_scoreboard = contest.view_contest_scoreboard.all()
-        contest_problems = contest.contest_problems.all()
+        contest = deepcopy(self.object)
 
         contest.pk = None
         contest.is_visible = False
@@ -867,48 +877,73 @@ ContestRankingProfile = namedtuple(
 BestSolutionData = namedtuple("BestSolutionData", "code points time state is_pretested")
 
 
-def make_contest_ranking_profile(contest, participation, contest_problems):
+def make_contest_ranking_profile(
+    contest, participation, contest_problems, show_final=False
+):
+    if not show_final:
+        points = participation.score
+        cumtime = participation.cumtime
+    else:
+        points = participation.score_final
+        cumtime = participation.cumtime_final
+
     user = participation.user
     return ContestRankingProfile(
         id=user.id,
         user=user.user,
         css_class=user.css_class,
         username=user.username,
-        points=participation.score,
-        cumtime=participation.cumtime,
+        points=points,
+        cumtime=cumtime,
         tiebreaker=participation.tiebreaker,
         organization=user.organization,
         participation_rating=participation.rating.rating
         if hasattr(participation, "rating")
         else None,
         problem_cells=[
-            contest.format.display_user_problem(participation, contest_problem)
+            contest.format.display_user_problem(
+                participation, contest_problem, show_final
+            )
             for contest_problem in contest_problems
         ],
-        result_cell=contest.format.display_participation_result(participation),
+        result_cell=contest.format.display_participation_result(
+            participation, show_final
+        ),
         participation=participation,
     )
 
 
-def base_contest_ranking_list(contest, problems, queryset):
+def base_contest_ranking_list(contest, problems, queryset, show_final=False):
     return [
-        make_contest_ranking_profile(contest, participation, problems)
+        make_contest_ranking_profile(contest, participation, problems, show_final)
         for participation in queryset.select_related("user__user", "rating").defer(
             "user__about", "user__organizations__about"
         )
     ]
 
 
-def contest_ranking_list(contest, problems, queryset=None):
+def contest_ranking_list(contest, problems, queryset=None, show_final=False):
     if not queryset:
         queryset = contest.users.filter(virtual=0)
-    return base_contest_ranking_list(
-        contest,
-        problems,
-        queryset.prefetch_related("user__organizations")
-        .extra(select={"round_score": "round(score, 6)"})
-        .order_by("is_disqualified", "-round_score", "cumtime", "tiebreaker"),
-    )
+
+    if not show_final:
+        return base_contest_ranking_list(
+            contest,
+            problems,
+            queryset.prefetch_related("user__organizations")
+            .extra(select={"round_score": "round(score, 6)"})
+            .order_by("is_disqualified", "-round_score", "cumtime", "tiebreaker"),
+            show_final,
+        )
+    else:
+        return base_contest_ranking_list(
+            contest,
+            problems,
+            queryset.prefetch_related("user__organizations")
+            .extra(select={"round_score": "round(score_final, 6)"})
+            .order_by("is_disqualified", "-round_score", "cumtime_final", "tiebreaker"),
+            show_final,
+        )
 
 
 def get_contest_ranking_list(
@@ -918,6 +953,7 @@ def get_contest_ranking_list(
     ranking_list=contest_ranking_list,
     show_current_virtual=False,
     ranker=ranker,
+    show_final=False,
 ):
     problems = list(
         contest.contest_problems.select_related("problem")
@@ -926,7 +962,7 @@ def get_contest_ranking_list(
     )
 
     users = ranker(
-        ranking_list(contest, problems),
+        ranking_list(contest, problems, show_final=show_final),
         key=attrgetter("points", "cumtime", "tiebreaker"),
     )
 
@@ -945,11 +981,16 @@ def get_contest_ranking_list(
 
 def contest_ranking_ajax(request, contest, participation=None):
     contest, exists = _find_contest(request, contest)
+    show_final = bool(request.GET.get("final", False))
     if not exists:
         return HttpResponseBadRequest("Invalid contest", content_type="text/plain")
 
     if not contest.can_see_full_scoreboard(request.user):
         raise Http404()
+
+    if show_final:
+        if not request.user.is_superuser or contest.format_name != "ioi16":
+            raise Http404()
 
     queryset = contest.users.filter(virtual__gte=0)
     if request.GET.get("friend") == "true" and request.profile:
@@ -963,6 +1004,7 @@ def contest_ranking_ajax(request, contest, participation=None):
         contest,
         participation,
         ranking_list=partial(contest_ranking_list, queryset=queryset),
+        show_final=show_final,
     )
     return render(
         request,
@@ -979,7 +1021,7 @@ def contest_ranking_ajax(request, contest, participation=None):
 
 class ContestRankingBase(ContestMixin, TitleMixin, DetailView):
     template_name = "contest/ranking.html"
-    tab = None
+    page_type = None
 
     def get_title(self):
         raise NotImplementedError()
@@ -999,12 +1041,12 @@ class ContestRankingBase(ContestMixin, TitleMixin, DetailView):
         users, problems = self.get_ranking_list()
         context["users"] = users
         context["problems"] = problems
-        context["tab"] = self.tab
+        context["page_type"] = self.page_type
         return context
 
 
 class ContestRanking(ContestRankingBase):
-    tab = "ranking"
+    page_type = "ranking"
 
     def get_title(self):
         return _("%s Rankings") % self.object.name
@@ -1029,8 +1071,20 @@ class ContestRanking(ContestRankingBase):
         return context
 
 
+class ContestFinalRanking(LoginRequiredMixin, ContestRanking):
+    page_type = "final_ranking"
+
+    def get_ranking_list(self):
+        if not self.request.user.is_superuser:
+            raise Http404()
+        if self.object.format_name != "ioi16":
+            raise Http404()
+
+        return get_contest_ranking_list(self.request, self.object, show_final=True)
+
+
 class ContestParticipationList(LoginRequiredMixin, ContestRankingBase):
-    tab = "participation"
+    page_type = "participation"
 
     def get_title(self):
         if self.profile == self.request.profile:
@@ -1179,7 +1233,7 @@ class ContestTagDetail(TitleMixin, ContestTagDetailAjax):
         return _("Contest tag: %s") % self.object.name
 
 
-class ProblemClarificationForm(forms.Form):
+class ContestProblemClarificationForm(forms.Form):
     body = forms.CharField(
         widget=HeavyPreviewPageDownWidget(
             preview=reverse_lazy("comment_preview"),
@@ -1190,12 +1244,12 @@ class ProblemClarificationForm(forms.Form):
 
     def __init__(self, request, *args, **kwargs):
         self.request = request
-        super(ProblemClarificationForm, self).__init__(*args, **kwargs)
+        super(ContestProblemClarificationForm, self).__init__(*args, **kwargs)
         self.fields["body"].widget.attrs.update({"placeholder": _("Issue description")})
 
 
 class NewContestClarificationView(ContestMixin, TitleMixin, SingleObjectFormView):
-    form_class = ProblemClarificationForm
+    form_class = ContestProblemClarificationForm
     template_name = "contest/clarification.html"
 
     def get_form_kwargs(self):
@@ -1225,12 +1279,13 @@ class NewContestClarificationView(ContestMixin, TitleMixin, SingleObjectFormView
         problem_code = self.request.POST["problem"]
         description = form.cleaned_data["body"]
 
-        clarification = ProblemClarification(description=description)
-        clarification.problem = Problem.objects.get(code=problem_code)
+        clarification = ContestProblemClarification(description=description)
+        clarification.problem = get_object_or_404(
+            ContestProblem, contest=self.get_object(), problem__code=problem_code
+        )
         clarification.save()
 
-        link = reverse("home")
-        return HttpResponseRedirect(link)
+        return HttpResponseRedirect(reverse("problem_list"))
 
     def get_title(self):
         return "New clarification for %s" % self.object.name
@@ -1264,26 +1319,27 @@ class ContestClarificationAjax(ContestMixin, DetailView):
             minutes=polling_time
         )
 
-        queryset = list(
-            ProblemClarification.objects.filter(
-                problem__in=self.object.problems.all(), date__gte=last_one_minute
-            ).values("problem", "problem__name", "description")
+        queryset = ContestProblemClarification.objects.filter(
+            problem__in=self.object.contest_problems.all(), date__gte=last_one_minute
         )
 
         problems = list(
             ContestProblem.objects.filter(contest=self.object)
             .order_by("order")
-            .values("problem")
+            .values_list("problem__code", flat=True)
         )
-        problems = [i["problem"] for i in problems]
-        for cla in queryset:
-            cla["order"] = self.object.get_label_for_problem(
-                problems.index(cla["problem"])
-            )
+        res = []
+        for clarification in queryset:
+            value = {
+                "order": self.object.get_label_for_problem(
+                    problems.index(clarification.problem.problem.code)
+                ),
+                "problem__name": clarification.problem.problem.name,
+                "description": clarification.description,
+            }
+            res.append(value)
 
-        return JsonResponse(
-            queryset, safe=False, json_dumps_params={"ensure_ascii": False}
-        )
+        return JsonResponse(res, safe=False, json_dumps_params={"ensure_ascii": False})
 
 
 def update_contest_mode(request):

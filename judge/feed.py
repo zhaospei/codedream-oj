@@ -40,7 +40,7 @@ class ProblemFeed(Feed):
         key = "problem_feed:%d" % problem.id
         desc = cache.get(key)
         if desc is None:
-            desc = str(markdown(problem.description, "problem"))[:500] + "..."
+            desc = str(markdown(problem.description))[:500] + "..."
             desc = escape_xml_illegal_chars(desc)
             cache.set(key, desc, 86400)
         return desc
@@ -71,7 +71,7 @@ class CommentFeed(Feed):
         key = "comment_feed:%d" % comment.id
         desc = cache.get(key)
         if desc is None:
-            desc = str(markdown(comment.body, "comment"))
+            desc = str(markdown(comment.body))
             desc = escape_xml_illegal_chars(desc)
             cache.set(key, desc, 86400)
         return desc
@@ -104,7 +104,7 @@ class BlogFeed(Feed):
         key = "blog_feed:%d" % post.id
         summary = cache.get(key)
         if summary is None:
-            summary = str(markdown(post.summary or post.content, "blog"))
+            summary = str(markdown(post.summary or post.content))
             summary = escape_xml_illegal_chars(summary)
             cache.set(key, summary, 86400)
         return summary

@@ -35,6 +35,10 @@ img {
     // height: auto
 }
 
+* {
+  -webkit-tap-highlight-color: transparent;
+}
+
 .full {
     width: 100% !important;
 }
@@ -108,7 +112,6 @@ body {
     position: relative;
     min-height: 100%;
     margin: 0 auto;
-    max-width: 107em;
     font-size: $base_font_size;
     line-height: 1.231;
     background: $background_light_gray;
@@ -180,10 +183,6 @@ header {
         white-space: nowrap;
     }
 
-    a {
-        color: $light-color;
-    }
-
     li {
         text-transform: none;
     }
@@ -193,7 +192,6 @@ header {
         margin: 0;
 
         & > li > a > span {
-            font-size: 13px;
             height: 36px;
             padding-top: 8px;
             display: block;
@@ -207,7 +205,6 @@ header {
             }
 
             & > span {
-                color: darkslateblue;
                 vertical-align: middle;
                 display: inline;
                 margin-top: 11px;
@@ -236,6 +233,7 @@ header {
     top: 0;
     left: 0;
     right: 0;
+    height: 48px;
 }
 
 nav {
@@ -290,16 +288,16 @@ nav {
                 }
 
                 &:hover {
-                    border-top: 2px solid $regular-color;
-                    color: $light-color;
+                    border-top: 2px solid #9c3706;
+                    color: lightcoral;
                     background: rgba(255, 255, 255, 0.25);
                     margin: 0;
                 }
 
                 &.active {
                     // color: #FFF;
-                    border-top: 2px solid $regular-color;
-                    color: $regular-color;
+                    border-top: 2px solid #9c3706;
+                    color: #9c3706;
                     background: white;
                 }
 
@@ -314,24 +312,20 @@ nav {
                 left: 5px;
                 display: none;
                 color: #fff;
-                background: $regular-color;
+                background: white;
                 margin: 0 !important;
                 box-shadow: 2px 2px 4px rgba(0, 0, 0, 0.4);
 
-                li {
-                    &:first-child {
-                        a.active {
-                            border-top: 1px solid $widget_black;
-                            background-color: $light-color !important;
-                        }
-                    }
-                }
 
                 li {
+                    &:hover {
+                        background: lightgray;
+                    }
+
                     display: block;
 
                     a {
-                        color: white !important;
+                        color: black !important;
                     }
                     
                     a, button {
@@ -478,7 +472,6 @@ noscript #noscript {
 
 #nav-placeholder {
     height: 47px;
-    max-width: 107em;
     background: white;
     border-right: 1px solid $border_gray;
     border-left: 1px solid $border_gray;
@@ -486,8 +479,6 @@ noscript #noscript {
 
 #contest-info {
     font-size: 1.25em;
-    border: 5px solid $highlight_blue;
-    border-radius: 0 $widget_border_radius $widget_border_radius 0;
     z-index: 100000;
     cursor: move;
     position: fixed;
@@ -543,6 +534,7 @@ noscript #noscript {
 
 #user-links {
     height: 100%;
+    padding-right: 1em;
 
     ul {
         margin: 0;
@@ -727,32 +719,45 @@ math {
 #nav-lang-icon:hover {
     color: darkblue;
 }
-#lang-dropdown {
-    padding: 4px 0;
+
+#nav-darkmode-icon {
+    cursor: pointer;
+    &:hover {
+        color: gray;
+    }
+}
+
+.dropdown {
     border-radius: 4px;
     border: 0.5px solid lightgray;
     margin-top: 1px;
     background: white;
     display: none;
+
+    a {
+        color: black;
+    }
 }
 
-.lang-dropdown-item {
-    padding-bottom: 0.3em;
-    padding-left: 0.4em;
-    font-size: 0.9em;
+.dropdown-item {
+    font-size: 15px;
+    padding: 6px 8px;
     cursor: pointer;
 }
 
-.lang-dropdown-item:hover {
+.dropdown-item:hover {
     background: lightgray;
 }
 
 .navbar-icons {
+    display: inline-flex;
+    align-items: center;
+    float: left;
+    margin-right: 0.3em;
+
     .navbar-icon {
         font-size: 1.6em;
     }
-    float: left;
-    margin-right: 0.3em;
 }
 .navbar-icon {
     margin-right: 0.3em;
@@ -776,6 +781,15 @@ math {
     text-transform: uppercase;
 }
 
+.featherlight {
+    z-index: 1000 !important;
+}
+
+select {
+    visibility: hidden;
+    max-height: 0;
+}
+
 @media (max-width: 500px) {
     #notification {
         margin-top: 0.6em;
@@ -786,51 +800,76 @@ math {
     color: green !important;
 }
 
-#contest-info {
-    font-size: 1.25em;
-    border: 5px solid $highlight_blue;
-    border-radius: 0 $widget_border_radius $widget_border_radius 0;
-    z-index: 100000;
-    cursor: move;
-    position: fixed;
-    left: 20px;
-    top: 90%;
-    display: none;
+.title-row {
+    color: #393630;
+    display: inline;
 }
-#contest-info-main {
-    border-left: 5px dotted white;
-    background: rgba(0, 0, 0, 0.77);
-    padding: 10px 12px;
+
+.gray {
+    color: gray;
+}
+
+.white {
     color: white;
-    display: inline;
 }
-#contest-info-toggle {
-    display: inline;
-    padding: 10px 12px;
-    border-radius: 0 10px 10px 0;
-    cursor: pointer;
+
+.black {
+    color: black;
 }
-.contest-info-toggle-mode-on {
-    background: rgba(0, 205, 0, 0.57);
+
+.red {
+    color: red;
 }
-.contest-info-toggle-mode-on:hover {
-    background: rgba(0, 205, 0, 0.97);
+
+.green {
+    color: green;
 }
-.contest-info-toggle-mode-off {
-    background: rgba(255, 0, 0, 0.57);
+
+.grayed {
+    color: #666;
 }
-.contest-info-toggle-mode-off:hover {
-    background: rgba(255, 0, 0, 0.97);
+
+.darkcyan {
+    color: darkcyan;
+}
+
+.peru {
+    color: peru;
+}
+
+.blue {
+    color: blue;
+}
+
+.background-d6e8f7 {
+    background-color: d6e8f7;
+}
+
+.background-bisque {
+    background-color: bisque;
+}
+
+.background-footer {
+    color: #808080;
 }
 
 @media (max-width: 799px) {
+    #user-links, .anon {
+        padding-right: 0.5em;
+    }
+}
+
+@media (min-width: 800px) {
+    .anon {
+        padding-right: 1em;
+    }
     .navbar-icons {
         margin-top: 6px;
     }
 }
 
 @media (min-width: 800px) {
-    .navbar-icons {
-        margin-top: 12px;
+    #event-tab {
+        display: none;
     }
 }

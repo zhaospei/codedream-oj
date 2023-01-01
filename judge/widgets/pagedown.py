@@ -40,7 +40,7 @@ else:
         class Media:
             css = {
                 "all": [
-                    "pagedown_widget.css",
+                    "markdown.css",
                 ]
             }
 
@@ -48,8 +48,10 @@ else:
         class Media:
             css = {
                 "all": [
+                    "pagedown_widget.css",
                     "content-description.css",
                     "admin/css/pagedown.css",
+                    "markdown.css",
                 ]
             }
             js = ["admin/js/pagedown.js"]
@@ -57,8 +59,8 @@ else:
     class MathJaxPagedownWidget(PagedownWidget):
         class Media:
             js = [
-                "mathjax_config.js",
-                "https://cdnjs.cloudflare.com/ajax/libs/mathjax/2.7.5/MathJax.js?config=TeX-AMS-MML_HTMLorMML",
+                "mathjax3_config.js",
+                "https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-chtml.js",
                 "pagedown_math.js",
             ]
 
@@ -102,7 +104,6 @@ else:
             }
 
         class Media:
-            css = {"all": ["dmmd-preview.css"]}
             js = ["dmmd-preview.js"]
 
     class HeavyPreviewAdminPageDownWidget(
@@ -114,5 +115,7 @@ else:
                     "pygment-github.css",
                     "table.css",
                     "ranks.css",
+                    "markdown.css",
+                    "dmmd-preview.css",
                 ]
             }

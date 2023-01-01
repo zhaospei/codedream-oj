@@ -8,13 +8,13 @@
                     if (!("MathJax" in window)) {
                         $.ajax({
                             type: "GET",
-                            url: '{{ static('mathjax_config.js') }}',
+                            url: '{{ static('mathjax3_config.js') }}',
                             dataType: "script",
                             cache: true,
                             success: function () {
                                 $.ajax({
                                     type: "GET",
-                                    url: 'https://cdnjs.cloudflare.com/ajax/libs/mathjax/2.7.5/config=TeX-AMS_HTML',
+                                    url: 'https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-chtml.js',
                                     dataType: "script",
                                     cache: true,
                                     success: function () {
@@ -33,13 +33,20 @@
             window.reply_comment = function (parent) {
                 var $comment_reply = $('#comment-' + parent + '-reply');
                 var reply_id = 'reply-' + parent;
+                var new_id = 'id' + parent + '_body';
                 if ($comment_reply.find('#' + reply_id).length == 0) {
-                    var $reply_form = $('#new-comment').clone(true).prop('id', reply_id);
+                    var $reply_form = $('#new-comment').clone(true).prop('id', reply_id).css("display", "");
                     $reply_form.find('h3').html('{{ _('Replying to comment') }}');
                     $reply_form.prepend('<a class="close">x</a>');
                     $reply_form.find('form.comment-submit-form input#id_parent').val(parent);
+                    $reply_form.find('div#wmd-button-bar-id_body').empty().prop('id','wmd-button-bar-' + new_id);
+                    $reply_form.find('textarea.wmd-input').val('').prop('id', 'wmd-input-' + new_id);
+                    $reply_form.find('div#id_body-preview').attr('data-textarea-id', 'wmd-input-' + new_id).prop('id', new_id + '-preview');
                     $reply_form.appendTo($comment_reply);
-                    register_dmmd_preview($('#' + reply_id + ' #id_body-preview'));
+                    register_dmmd_preview($reply_form.find('div#' + new_id + '-preview'));
+                    if ('DjangoPagedown' in window) {
+                        window.DjangoPagedown.createEditor($reply_form.find('div.wmd-wrapper').get(0));
+                    }
                 }
                 $comment_reply.fadeIn();
 
@@ -55,10 +62,7 @@
             function update_math($comment) {
                 if ('MathJax' in window) {
                     var $body = $comment.find('.comment-body');
-                    MathJax.Hub.Queue(['Typeset', MathJax.Hub, $body[0]], function () {
-                        $body.find('.tex-image').hide();
-                        $body.find('.tex-text').show();
-                    });
+                    MathJax.typeset($body[0]);
                 }
             }
 
@@ -163,12 +167,12 @@
                 afterOpen: function () {
                     register_dmmd_preview($('#id-edit-comment-body-preview'));
                     if ('DjangoPagedown' in window) {
-                        var $wmd = $('.featherlight .wmd-input');
+                        var $wmd = $('.featherlight .wmd-wrapper');
                         if ($wmd.length) {
                             window.DjangoPagedown.createEditor($wmd.get(0));
                             if ('MathJax' in window) {
                                 var preview = $('.featherlight div.wmd-preview')[0];
-                                MathJax.Hub.Queue(['Typeset', MathJax.Hub, preview]);
+                                MathJax.typeset(preview);
                             }
                         }
                     }
@@ -214,6 +218,14 @@
                 $comment.find('.comment-body').show();
                 $comment.find('.bad-comment-body').hide();
             };
+            
+            $("#write-comment").click( function(event)  {
+                event.preventDefault();
+                $("#new-comment").show("slow");
+                $("#write-comment").hide();
+                $(".no-comments-message").hide();
+            });
+            
         });
-    </script>
+    </script>   
 {% endcompress %}

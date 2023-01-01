@@ -1,183 +1,112 @@
-import logging
-import re
-from html.parser import HTMLParser
-from urllib.parse import urlparse
-
-import mistune
-from django.conf import settings
-from markupsafe import Markup
-from lxml import html
-from lxml.etree import ParserError, XMLSyntaxError
-
-from judge.highlight_code import highlight_code
-from judge.jinja2.markdown.lazy_load import lazy_load as lazy_load_processor
-from judge.jinja2.markdown.math import MathInlineGrammar, MathInlineLexer, MathRenderer
-from judge.utils.camo import client as camo_client
-from judge.utils.texoid import TEXOID_ENABLED, TexoidRenderer
 from .. import registry
-
-logger = logging.getLogger("judge.html")
-
-NOFOLLOW_WHITELIST = settings.NOFOLLOW_EXCLUDED
-
-
-class CodeSafeInlineGrammar(mistune.InlineGrammar):
-    double_emphasis = re.compile(r"^\*{2}([\s\S]+?)()\*{2}(?!\*)")  # **word**
-    emphasis = re.compile(r"^\*((?:\*\*|[^\*])+?)()\*(?!\*)")  # *word*
+import markdown as _markdown
+import bleach
+from django.utils.html import escape
+from bs4 import BeautifulSoup
+from pymdownx import superfences
 
 
-class AwesomeInlineGrammar(MathInlineGrammar, CodeSafeInlineGrammar):
-    pass
+EXTENSIONS = [
+    "pymdownx.arithmatex",
+    "pymdownx.magiclink",
+    "pymdownx.betterem",
+    "pymdownx.details",
+    "pymdownx.emoji",
+    "pymdownx.inlinehilite",
+    "pymdownx.superfences",
+    "pymdownx.tasklist",
+    "markdown.extensions.footnotes",
+    "markdown.extensions.attr_list",
+    "markdown.extensions.def_list",
+    "markdown.extensions.tables",
+    "markdown.extensions.admonition",
+    "nl2br",
+    "mdx_breakless_lists",
+]
 
+EXTENSION_CONFIGS = {
+    "pymdownx.superfences": {
+        "custom_fences": [
+            {
+                "name": "sample",
+                "class": "no-border",
+                "format": superfences.fence_code_format,
+            }
+        ]
+    },
+}
 
-class AwesomeInlineLexer(MathInlineLexer, mistune.InlineLexer):
-    grammar_class = AwesomeInlineGrammar
+ALLOWED_TAGS = bleach.sanitizer.ALLOWED_TAGS + [
+    "img",
+    "center",
+    "iframe",
+    "div",
+    "span",
+    "table",
+    "tr",
+    "td",
+    "th",
+    "tr",
+    "pre",
+    "code",
+    "p",
+    "hr",
+    "h1",
+    "h2",
+    "h3",
+    "h4",
+    "h5",
+    "h6",
+    "thead",
+    "tbody",
+    "sup",
+    "dl",
+    "dt",
+    "dd",
+    "br",
+    "details",
+    "summary",
+]
 
-
-class AwesomeRenderer(MathRenderer, mistune.Renderer):
-    def __init__(self, *args, **kwargs):
-        self.nofollow = kwargs.pop("nofollow", True)
-        self.texoid = TexoidRenderer() if kwargs.pop("texoid", False) else None
-        self.parser = HTMLParser()
-        super(AwesomeRenderer, self).__init__(*args, **kwargs)
-
-    def _link_rel(self, href):
-        if href:
-            try:
-                url = urlparse(href)
-            except ValueError:
-                return ' rel="nofollow"'
-            else:
-                if url.netloc and url.netloc not in NOFOLLOW_WHITELIST:
-                    return ' rel="nofollow"'
-        return ""
-
-    def autolink(self, link, is_email=False):
-        text = link = mistune.escape(link)
-        if is_email:
-            link = "mailto:%s" % link
-        return '<a href="%s"%s>%s</a>' % (link, self._link_rel(link), text)
-
-    def table(self, header, body):
-        return (
-            '<table class="table">\n<thead>%s</thead>\n'
-            "<tbody>\n%s</tbody>\n</table>\n"
-        ) % (header, body)
-
-    def link(self, link, title, text):
-        link = mistune.escape_link(link)
-        if not title:
-            return '<a href="%s"%s>%s</a>' % (link, self._link_rel(link), text)
-        title = mistune.escape(title, quote=True)
-        return '<a href="%s" title="%s"%s>%s</a>' % (
-            link,
-            title,
-            self._link_rel(link),
-            text,
-        )
-
-    def block_code(self, code, lang=None):
-        if not lang:
-            return "\n<pre><code>%s</code></pre>\n" % mistune.escape(code).rstrip()
-        return highlight_code(code, lang)
-
-    def block_html(self, html):
-        if self.texoid and html.startswith("<latex"):
-            attr = html[6 : html.index(">")]
-            latex = html[html.index(">") + 1 : html.rindex("<")]
-            latex = self.parser.unescape(latex)
-            result = self.texoid.get_result(latex)
-            if not result:
-                return "<pre>%s</pre>" % mistune.escape(latex, smart_amp=False)
-            elif "error" not in result:
-                img = (
-                    '''<img src="%(svg)s" onerror="this.src='%(png)s';this.onerror=null"'''
-                    'width="%(width)s" height="%(height)s"%(tail)s>'
-                ) % {
-                    "svg": result["svg"],
-                    "png": result["png"],
-                    "width": result["meta"]["width"],
-                    "height": result["meta"]["height"],
-                    "tail": " /" if self.options.get("use_xhtml") else "",
-                }
-                style = [
-                    "max-width: 100%",
-                    "height: %s" % result["meta"]["height"],
-                    "max-height: %s" % result["meta"]["height"],
-                    "width: %s" % result["meta"]["height"],
-                ]
-                if "inline" in attr:
-                    tag = "span"
-                else:
-                    tag = "div"
-                    style += ["text-align: center"]
-                return '<%s style="%s">%s</%s>' % (tag, ";".join(style), img, tag)
-            else:
-                return "<pre>%s</pre>" % mistune.escape(
-                    result["error"], smart_amp=False
-                )
-        return super(AwesomeRenderer, self).block_html(html)
-
-    def header(self, text, level, *args, **kwargs):
-        return super(AwesomeRenderer, self).header(text, level + 2, *args, **kwargs)
-
-
-def create_spoiler(value, style):
-    respoiler = re.compile(r"(^\|\|(.+)\s+([\s\S]+?)\s*\|\|)", re.MULTILINE)
-    matches = re.findall(respoiler, value)
-    html = (
-        '<details><summary style="color: brown">'
-        + '<span class="spoiler-summary">{summary}</span>'
-        + "</summary>{detail}</details>"
-    )
-
-    for entire, summary, detail in matches:
-        detail = markdown(detail, style)
-        new_html = html.format(summary=summary, detail=detail)
-        value = value.replace(entire, new_html)
-    return value
+ALLOWED_ATTRS = ["src", "width", "height", "href", "class", "open"]
 
 
 @registry.filter
-def markdown(value, style, math_engine=None, lazy_load=False, hard_wrap=False):
-    styles = settings.MARKDOWN_STYLES.get(style, settings.MARKDOWN_DEFAULT_STYLE)
-    escape = styles.get("safe_mode", True)
-    nofollow = styles.get("nofollow", True)
-    texoid = TEXOID_ENABLED and styles.get("texoid", False)
-    math = hasattr(settings, "MATHOID_URL") and styles.get("math", False)
-
-    value = create_spoiler(value, style)
-    post_processors = []
-    if styles.get("use_camo", False) and camo_client is not None:
-        post_processors.append(camo_client.update_tree)
-    if lazy_load:
-        post_processors.append(lazy_load_processor)
-
-    renderer = AwesomeRenderer(
-        escape=escape,
-        nofollow=nofollow,
-        texoid=texoid,
-        math=math and math_engine is not None,
-        math_engine=math_engine,
+def markdown(value, lazy_load=False):
+    extensions = EXTENSIONS
+    html = _markdown.markdown(
+        value, extensions=extensions, extension_configs=EXTENSION_CONFIGS
     )
-    markdown = mistune.Markdown(
-        renderer=renderer,
-        inline=AwesomeInlineLexer,
-        parse_block_html=1,
-        parse_inline_html=1,
-        hard_wrap=hard_wrap,
-    )
-    result = markdown(value)
-    if post_processors:
-        try:
-            tree = html.fromstring(result, parser=html.HTMLParser(recover=True))
-        except (XMLSyntaxError, ParserError) as e:
-            if result and (
-                not isinstance(e, ParserError) or e.args[0] != "Document is empty"
-            ):
-                logger.exception("Failed to parse HTML string")
-            tree = html.Element("div")
-        for processor in post_processors:
-            processor(tree)
-        result = html.tostring(tree, encoding="unicode")
-    return Markup(result)
+
+    # Don't clean mathjax
+    hash_script_tag = {}
+    soup = BeautifulSoup(html, "html.parser")
+    for script_tag in soup.find_all("script"):
+        allow_math_types = ["math/tex", "math/tex; mode=display"]
+        if script_tag.attrs.get("type", False) in allow_math_types:
+            hash_script_tag[str(hash(str(script_tag)))] = str(script_tag)
+
+    for hashed_tag in hash_script_tag:
+        tag = hash_script_tag[hashed_tag]
+        html = html.replace(tag, hashed_tag)
+
+    html = bleach.clean(html, tags=ALLOWED_TAGS, attributes=ALLOWED_ATTRS)
+
+    for hashed_tag in hash_script_tag:
+        tag = hash_script_tag[hashed_tag]
+        html = html.replace(hashed_tag, tag)
+
+    if not html:
+        html = escape(value)
+    if lazy_load or True:
+        soup = BeautifulSoup(html, features="html.parser")
+        for img in soup.findAll("img"):
+            if img.get("src"):
+                img["data-src"] = img["src"]
+                img["src"] = ""
+        for img in soup.findAll("iframe"):
+            if img.get("src"):
+                img["data-src"] = img["src"]
+                img["src"] = ""
+        html = str(soup)
+    return '<div class="md-typeset">%s</div>' % html

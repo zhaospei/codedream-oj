@@ -9,25 +9,26 @@
                 width: 98%;
                 margin-left: 0;
             }
+            .middle-right-content {
+                margin-left: 13%;
+                display: inline-flex;
+            }
         }
         @media(max-width: 799px) {
             #content {
                 width: 100%;
                 margin-left: 0;
             }
+            .middle-right-content {
+                display: block;
+            }
         }
     </style>
-    {% block three_col_media %}{% endblock %}
 {% endblock %}
 
 {% block js_media %}
     <script type="text/javascript">
-        $(document).ready(function () {
-            $('.left-sidebar-item').on('click', function() {
-                var url = $(this).attr('data-href');
-                if (url === '#') return;
-                window.location.href = url;
-            });
+        function activateBlogBoxOnClick() {
             $('.blog-box').on('click', function() {
                 var $description = $(this).children('.blog-description');
                 var max_height = $description.css('max-height');
@@ -43,9 +44,58 @@
                     $(this).css('cursor', 'pointer');
                 }
             });
+        }
+
+        function navigateTo($elem, update_sidebar=false) {
+            var url = $elem.attr('data-href') || $elem.attr('href');
+
+            if (url === '#') return;
+            if (update_sidebar) {
+                $('.left-sidebar-item').removeClass('active');
+                $elem.addClass('active');
+            }
+            $('.middle-right-content').html(loading_page);
+            $.get(url, function(data) {
+                var reload_content = $(data).find('.middle-right-content');
+
+                if (reload_content.length) {
+                    window.history.pushState("", "", url);
+                    $('.middle-right-content').html(reload_content.first().html());
+                    $(document).prop('title', $(data).filter('title').text());
+                    MathJax.typeset($('.middle-right-content')[0]);
+                    onWindowReady();
+                    activateBlogBoxOnClick();
+                    $('.xdsoft_datetimepicker').hide();
+                    registerNavigation();
+                }
+                else {
+                    window.location.href = url;
+                }
+            });
+        }
+
+        function registerNavigation() {
+            const links = ['.pagination a', '.tabs a', '.problem-feed-option a'];
+            for (link of links) {
+                $(link).on('click', function(e) {
+                    e.preventDefault();
+                    navigateTo($(this));
+                })
+            }
+        }
+
+        $(function () {
+            window.addEventListener('popstate', (e) => {
+                window.location.href = e.currentTarget.location.href;
+            });
+            activateBlogBoxOnClick();
+
+            $('.left-sidebar-item').on('click', function() {
+                navigateTo($(this), true);
+            });
+            registerNavigation();
         });
     </script>
-    {% block three_col_js %}{% endblock %}
 {% endblock %}
 
 {% macro make_tab_item(name, fa, url, text) %}
@@ -59,11 +109,15 @@
     {% block before_posts %}{% endblock %}
     <div id="three-col-container">
         {% block left_sidebar %}{% endblock %}
-        <div class="middle-content">
-            {% block middle_title %}{% endblock %}
-            {% block middle_content %}{% endblock %}
+        <div class="middle-right-content">
+            {% block three_col_media %}{% endblock %}
+            {% block three_col_js %}{% endblock %}
+            <div class="middle-content">
+                {% block middle_title %}{% endblock %}
+                {% block middle_content %}{% endblock %}
+            </div>
+            {% block right_sidebar %}{% endblock %}
         </div>
-        {% block right_sidebar %}{% endblock %}
     </div>
     {% block after_posts %}{% endblock %}
 {% endblock %}

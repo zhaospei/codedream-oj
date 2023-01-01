@@ -10,7 +10,7 @@ from django.utils.translation import gettext_lazy
 
 from judge.contest_format.default import DefaultContestFormat
 from judge.contest_format.registry import register_contest_format
-from judge.timezone import from_database_time
+from judge.timezone import from_database_time, to_database_time
 from judge.utils.timedelta import nice_repr
 
 
@@ -55,6 +55,10 @@ class ICPCContestFormat(DefaultContestFormat):
         score = 0
         format_data = {}
 
+        frozen_time = self.contest.end_time
+        if self.contest.freeze_after:
+            frozen_time = participation.start + self.contest.freeze_after
+
         with connection.cursor() as cursor:
             cursor.execute(
                 """
@@ -67,9 +71,10 @@ class ICPCContestFormat(DefaultContestFormat):
                 FROM judge_contestproblem cp INNER JOIN
                      judge_contestsubmission cs ON (cs.problem_id = cp.id AND cs.participation_id = %s) LEFT OUTER JOIN
                      judge_submission sub ON (sub.id = cs.submission_id)
+                WHERE sub.date < %s
                 GROUP BY cp.id
             """,
-                (participation.id, participation.id),
+                (participation.id, participation.id, to_database_time(frozen_time)),
             )
 
             for points, time, prob in cursor.fetchall():
@@ -102,21 +107,22 @@ class ICPCContestFormat(DefaultContestFormat):
                 format_data[str(prob)] = {"time": dt, "points": points, "penalty": prev}
                 score += points
 
+        self.handle_frozen_state(participation, format_data)
         participation.cumtime = max(0, cumtime + penalty)
-        participation.score = score
+        participation.score = round(score, self.contest.points_precision)
         participation.tiebreaker = last  # field is sorted from least to greatest
         participation.format_data = format_data
         participation.save()
 
-    def display_user_problem(self, participation, contest_problem):
+    def display_user_problem(self, participation, contest_problem, show_final=False):
         format_data = (participation.format_data or {}).get(str(contest_problem.id))
         if format_data:
             penalty = (
                 format_html(
-                    '<small style="color:red"> ({penalty})</small>',
+                    '<small style="color:red"> +{penalty}</small>',
                     penalty=floatformat(format_data["penalty"]),
                 )
-                if format_data["penalty"]
+                if format_data.get("penalty")
                 else ""
             )
             return format_html(
@@ -131,12 +137,13 @@ class ICPCContestFormat(DefaultContestFormat):
                     + self.best_solution_state(
                         format_data["points"], contest_problem.points
                     )
+                    + (" frozen" if format_data.get("frozen") else "")
                 ),
                 url=reverse(
                     "contest_user_submissions_ajax",
                     args=[
                         self.contest.key,
-                        participation.user.user.username,
+                        participation.id,
                         contest_problem.problem.code,
                     ],
                 ),

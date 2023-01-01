@@ -1,4 +1,3 @@
-
 """
 Django settings for dmoj project.
 
@@ -26,13 +25,13 @@ BASE_DIR = os.path.dirname(os.path.dirname(__file__))
 SECRET_KEY = "5*9f5q57mqmlz2#f$x1h76&jxy#yortjl1v+l*6hd18$d*yx#0"
 
 # SECURITY WARNING: don't run with debug turned on in production!
-DEBUG = False
+DEBUG = True
 
-ALLOWED_HOSTS = ['oj.codedream.edu.vn-bwgf', 'www.oj.codedream.edu.vn-bwgf' ]
+ALLOWED_HOSTS = []
 
 SITE_ID = 1
-SITE_NAME = "CDOJ"
-SITE_LONG_NAME = "CDOJ: CodeDream Online Judge"
+SITE_NAME = "LQDOJ"
+SITE_LONG_NAME = "LQDOJ: Le Quy Don Online Judge"
 SITE_ADMIN_EMAIL = False
 
 DMOJ_REQUIRE_STAFF_2FA = True
@@ -50,10 +49,6 @@ DMOJ_PP_BONUS_FUNCTION = lambda n: 300 * (1 - 0.997**n)  # noqa: E731
 NODEJS = "/usr/bin/node"
 EXIFTOOL = "/usr/bin/exiftool"
 ACE_URL = "//cdnjs.cloudflare.com/ajax/libs/ace/1.1.3"
-SELECT2_JS_URL = "//cdnjs.cloudflare.com/ajax/libs/select2/4.0.3/js/select2.min.js"
-DEFAULT_SELECT2_CSS = (
-    "//cdnjs.cloudflare.com/ajax/libs/select2/4.0.3/css/select2.min.css"
-)
 
 DMOJ_CAMO_URL = None
 DMOJ_CAMO_KEY = None
@@ -103,7 +98,6 @@ MATHOID_CACHE_URL = False
 TEXOID_GZIP = False
 TEXOID_META_CACHE = "default"
 TEXOID_META_CACHE_TTL = 86400
-DMOJ_NEWSLETTER_ID_ON_REGISTER = 1
 
 BAD_MAIL_PROVIDERS = ()
 BAD_MAIL_PROVIDER_REGEX = ()
@@ -249,15 +243,14 @@ INSTALLED_APPS += (
     "impersonate",
     "django_jinja",
     "chat_box",
-    "newsletter",
     "django.forms",
 )
 
 MIDDLEWARE = (
     "judge.middleware.ShortCircuitMiddleware",
-    "django.middleware.common.CommonMiddleware",
     "django.contrib.sessions.middleware.SessionMiddleware",
     "django.middleware.locale.LocaleMiddleware",
+    "django.middleware.common.CommonMiddleware",
     "django.middleware.csrf.CsrfViewMiddleware",
     "django.contrib.auth.middleware.AuthenticationMiddleware",
     "judge.middleware.DMOJLoginMiddleware",
@@ -268,10 +261,15 @@ MIDDLEWARE = (
     "impersonate.middleware.ImpersonateMiddleware",
     "judge.middleware.DMOJImpersonationMiddleware",
     "judge.middleware.ContestMiddleware",
+    "judge.middleware.DarkModeMiddleware",
     "django.contrib.flatpages.middleware.FlatpageFallbackMiddleware",
     "judge.social_auth.SocialAuthExceptionMiddleware",
     "django.contrib.redirects.middleware.RedirectFallbackMiddleware",
 )
+
+X_FRAME_OPTIONS = "SAMEORIGIN"
+
+LANGUAGE_COOKIE_AGE = 8640000
 
 FORM_RENDERER = "django.forms.renderers.TemplatesSetting"
 
@@ -359,45 +357,9 @@ LOCALE_PATHS = [
 ]
 
 LANGUAGES = [
-    ("en", _("English")),
     ("vi", _("Vietnamese")),
+    ("en", _("English")),
 ]
-
-MARKDOWN_ADMIN_EDITABLE_STYLE = {
-    "safe_mode": False,
-    "use_camo": True,
-    "texoid": True,
-    "math": True,
-}
-
-MARKDOWN_DEFAULT_STYLE = {
-    "safe_mode": True,
-    "nofollow": True,
-    "use_camo": True,
-    "math": True,
-}
-
-MARKDOWN_USER_LARGE_STYLE = {
-    "safe_mode": True,
-    "nofollow": True,
-    "use_camo": True,
-    "math": True,
-}
-
-MARKDOWN_STYLES = {
-    "comment": MARKDOWN_ADMIN_EDITABLE_STYLE,
-    "self-description": MARKDOWN_ADMIN_EDITABLE_STYLE,
-    "problem": MARKDOWN_ADMIN_EDITABLE_STYLE,
-    "contest": MARKDOWN_ADMIN_EDITABLE_STYLE,
-    "language": MARKDOWN_ADMIN_EDITABLE_STYLE,
-    "license": MARKDOWN_ADMIN_EDITABLE_STYLE,
-    "judge": MARKDOWN_ADMIN_EDITABLE_STYLE,
-    "blog": MARKDOWN_ADMIN_EDITABLE_STYLE,
-    "solution": MARKDOWN_ADMIN_EDITABLE_STYLE,
-    "contest_tag": MARKDOWN_ADMIN_EDITABLE_STYLE,
-    "organization-about": MARKDOWN_ADMIN_EDITABLE_STYLE,
-    "ticket": MARKDOWN_ADMIN_EDITABLE_STYLE,
-}
 
 # Database
 # https://docs.djangoproject.com/en/1.11/ref/settings/#databases
@@ -504,22 +466,12 @@ FILE_UPLOAD_PERMISSIONS = 0o644
 
 MESSAGES_TO_LOAD = 15
 
-NEWSLETTER_CONFIRM_EMAIL = False
-
-# Amount of seconds to wait between each email. Here 100ms is used.
-NEWSLETTER_EMAIL_DELAY = 0.1
-
-# Amount of seconds to wait between each batch. Here one minute is used.
-NEWSLETTER_BATCH_DELAY = 60
-
-# Number of emails in one batch
-NEWSLETTER_BATCH_SIZE = 100
-
-# Google form to request name
-REGISTER_NAME_URL = None
+ML_OUTPUT_PATH = None
 
 try:
     with open(os.path.join(os.path.dirname(__file__), "local_settings.py")) as f:
         exec(f.read(), globals())
 except IOError:
     pass
+
+DEFAULT_AUTO_FIELD = "django.db.models.AutoField"

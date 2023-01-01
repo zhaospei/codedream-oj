@@ -5,12 +5,6 @@
 
 {% block two_col_media %}
     <style>
-        .time-left {
-            text-align: left;
-            color: #777;
-            padding-top: 0.5em;
-        }
-
         .content-description ul {
             padding: 0 !important;
         }
@@ -18,6 +12,10 @@
         .btn-contest {
             display: inline-block;
             padding: 1px 6px;
+        }
+
+        .contest-group-header {
+            padding-bottom: 1em;
         }
 
         {% if page_obj and page_obj.number > 1%}
@@ -102,11 +100,7 @@
 {% endblock %}
 
 {% block left_sidebar %}
-    <div class="left-sidebar">
-        {{ make_tab_item('list', 'fa fa-list', url('contest_list'), _('List')) }}
-        {{ make_tab_item('calendar', 'fa fa-calendar', url('contest_calendar', now.year, now.month), _('Calendar')) }}
-        {{ make_tab_item('admin', 'fa fa-edit', url('admin:judge_contest_changelist'), _('Admin')) }}
-    </div>
+    {% include "contest/contest-list-tabs.html" %}
 {% endblock %}
 
 {% macro contest_head(contest) %}
@@ -116,27 +110,27 @@
         </a>
         <span class="contest-tags">
             {% if not contest.is_visible %}
-                <span style="background-color: #000000; color: #ffffff" class="contest-tag">
+                <span class="contest-tag contest-tag-hidden">
                     <i class="fa fa-eye-slash"></i> {{ _('hidden') }}
                 </span>
             {% endif %}
             {% if contest.is_editable %}
-                <span style="background-color: green" class="contest-tag">
-                    <a href="{{ url('organization_contest_edit', organization.id, organization.slug, contest.key) }}" style="color: white">
+                <span class="contest-tag contest-tag-edit">
+                    <a href="{{ url('organization_contest_edit', organization.id, organization.slug, contest.key) }}" class="white">
                         <i class="fa fa-edit"></i> {{ _('Edit') }}
                     </a>
                 </span>
             {% endif %}
             {% if contest.is_private %}
-                <span style="background-color: #666666; color: #ffffff" class="contest-tag">
+                <span class="contest-tag contest-tag-private">
                     <i class="fa fa-lock"></i> {{ _('private') }}
                 </span>
             {% endif %}
             {% if not hide_contest_orgs %}
                 {% if contest.is_organization_private %}
                     {% for org in contest.organizations.all() %}
-                        <span style="background-color: #cccccc" class="contest-tag">
-                            <a href="{{ org.get_absolute_url() }}" style="color: #000000">
+                        <span class="contest-tag contest-tag-org">
+                            <a href="{{ org.get_absolute_url() }}">
                                 <i class="fa fa-lock"></i> {{ org.name }}
                             </a>
                         </span>
@@ -144,7 +138,7 @@
                 {% endif %}
             {% endif %}
             {% if contest.is_rated %}
-                <span style="background-color: #BD0A43; color: #ffffff" class="contest-tag">
+                <span class="contest-tag-rated">
                     <i class="fa fa-bar-chart"></i> {{ _('rated') }}
                 </span>
             {% endif %}
@@ -275,10 +269,10 @@
         {% endif %}
 
         {% if current_contests %}
-            <h4 class="toggle open">
+            <h3 class="toggle open contest-group-header">
                 <i class="fa fa-chevron-right fa-fw"></i>
                 {{ _('Ongoing Contests') }} 
-            </h4>
+            </h3>
             <div id="ongoing-table" class="toggled">
                 <table class="contest-list table striped">
                     <thead>
@@ -317,10 +311,10 @@
             </div>
         {% endif %}
 
-        <h4 class="toggle open">
+        <h3 class="toggle open contest-group-header">
             <i class="fa fa-chevron-right fa-fw"></i>
             {{ _('Upcoming Contests') }} 
-        </h4>
+        </h3>
         {% if future_contests %}
             <div class="toggled">
                 <table class="contest-list table striped">
@@ -356,7 +350,7 @@
         <br>
 
         {% if past_contests %}
-            <h4>{{ _('Past Contests') }}</h4>
+            <h3 class="contest-group-header">{{ _('Past Contests') }}</h3>
             {% if page_obj and page_obj.num_pages > 1 %}
                 <div style="margin-bottom: 4px;">
                     {% include "list-pages.html" %}
@@ -366,10 +360,10 @@
                 <thead>
                 <tr>
                     <th style="width:90%">
-                        <a style="color: #7dc7ff" href="{{ sort_links.name }}">{{ _('Contest') }}{{ sort_order.name }}</a>
+                        <a class="contest-list-sort" href="{{ sort_links.name }}">{{ _('Contest') }}{{ sort_order.name }}</a>
                     </th>
                     <th>
-                        <a style="color: #7dc7ff" href="{{ sort_links.user_count }}">{{ _('Users') }}{{ sort_order.user_count }}</a>
+                        <a class="contest-list-sort" href="{{ sort_links.user_count }}">{{ _('Users') }}{{ sort_order.user_count }}</a>
                     </th>
                     {% if not request.in_contest %}
                         <th style="width:15%"></th>

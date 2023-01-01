@@ -23,15 +23,15 @@
 
         italic: "Emphasis <em> Ctrl+I",
         italicexample: "emphasized text",
-		
-		latex: "Latex embed - Ctrl+M",
-		latexexample: "x^2",
-		latexdisplay: "Latex display embed - Ctrl+Space",
-		latexdisplayexample: "f(x)=x^2",
+        
+        latex: "Latex embed - Ctrl+M",
+        latexexample: "x^2",
+        latexdisplay: "Latex display embed - Ctrl+Space",
+        latexdisplayexample: "f(x)=x^2",
 
         link: "Hyperlink <a> Ctrl+L",
         linkdescription: "enter link description here",
-        linkdialog: "<p><b>Insert Hyperlink</b></p><p>https://dmoj.ca/ \"optional title\"</p>",
+        linkdialog: "<p><b>Insert Hyperlink</b></p><p>https://lqdoj.edu.vn/ \"optional title\"</p>",
 
         user: "User reference",
         userexample: "enter username here",
@@ -50,10 +50,15 @@
         ulist: "Bulleted List <ul> Ctrl+U",
         litem: "List item",
 
-        heading: "Heading <h1>/<h2> Ctrl+H",
+        heading: "Heading <h2>/<h2> Ctrl+H",
         headingexample: "Heading",
 
         hr: "Horizontal Rule <hr> Ctrl+R",
+
+        admonition: "Admonition",
+        spoiler: "Spoiler",
+        spoilerSummary: "summary",
+        spoilerDetail: "detail",
 
         undo: "Undo - Ctrl+Z",
         redo: "Redo - Ctrl+Y",
@@ -1250,13 +1255,19 @@
             keyEvent = "keypress";
         }
 
+        function doCommand(command) {
+            var fakeButton = {};
+            fakeButton.textOp = bindCommand(command);
+            doClick(fakeButton);
+        }
+
         util.addEvent(inputBox, keyEvent, function (key) {
 
             // Check to see if we have a button key and, if so execute the callback.
             if ((key.ctrlKey || key.metaKey) && !key.altKey && !key.shiftKey) {
-
                 var keyCode = key.charCode || key.keyCode;
                 var keyCodeStr = String.fromCharCode(keyCode).toLowerCase();
+                var hasKey = true;
 
                 switch (keyCodeStr) {
                     case "b":
@@ -1268,12 +1279,12 @@
                     case "l":
                         doClick(buttons.link);
                         break;
-					case "m":
-						doClick(buttons.latex);
-						break;
-					case " ":
-						doClick(buttons.displaylatex);
-						break;
+                    case "m":
+                        doClick(buttons.latex);
+                        break;
+                    case " ":
+                        doClick(buttons.displaylatex);
+                        break;
                     case "q":
                         doClick(buttons.quote);
                         break;
@@ -1307,9 +1318,21 @@
                         }
                         break;
                     default:
-                        return;
+                        hasKey = false;
+                        break;
                 }
-
+                if (!hasKey) {
+                    switch (keyCode) {
+                        case 221:
+                            doCommand("doIndent");
+                            break;
+                        case 219:
+                            doCommand("doReverseIndent");
+                            break;
+                        default:
+                            return;
+                    }
+                }
 
                 if (key.preventDefault) {
                     key.preventDefault();
@@ -1321,15 +1344,22 @@
             }
         });
 
-        // Auto-indent on shift-enter
-        util.addEvent(inputBox, "keyup", function (key) {
-            if (key.shiftKey && !key.ctrlKey && !key.metaKey) {
-                var keyCode = key.charCode || key.keyCode;
-                // Character 13 is Enter
-                if (keyCode === 13) {
-                    var fakeButton = {};
-                    fakeButton.textOp = bindCommand("doAutoindent");
-                    doClick(fakeButton);
+        util.addEvent(inputBox, "keydown", function (key) {
+            var keyCode = key.charCode || key.keyCode;
+            // Character 13 is Enter
+            if (keyCode === 13) {
+                doCommand("doAutoindent");
+                key.preventDefault();
+            }
+
+            // Tab
+            if (keyCode === 9) {
+                key.preventDefault();
+                if (key.shiftKey) {
+                    doCommand("doReverseIndent");
+                }
+                else {
+                    doCommand("doIndent");
                 }
             }
         });
@@ -1406,35 +1436,16 @@
             }
         };
 
+        function bindCommand(method) {
+            if (typeof method === "string")
+                method = commandManager[method];
+            return function () { method.apply(commandManager, arguments); }
+        }
+
         function setupButton(button, isEnabled) {
-
-            var normalYShift = "0px";
-            var disabledYShift = "-20px";
-            var highlightYShift = "-40px";
-            var image = button.getElementsByTagName("span")[0];
             if (isEnabled) {
-                image.style.backgroundPosition = button.XShift + " " + normalYShift;
-                button.onmouseover = function () {
-                    image.style.backgroundPosition = this.XShift + " " + highlightYShift;
-                };
-
-                button.onmouseout = function () {
-                    image.style.backgroundPosition = this.XShift + " " + normalYShift;
-                };
-
-                // IE tries to select the background image "button" text (it's
-                // implemented in a list item) so we have to cache the selection
-                // on mousedown.
-                if (uaSniffed.isIE) {
-                    button.onmousedown = function () {
-                        if (doc.activeElement && doc.activeElement !== panels.input) { // we're not even in the input box, so there's no selection
-                            return;
-                        }
-                        panels.ieCachedRange = document.selection.createRange();
-                        panels.ieCachedScrollTop = panels.input.scrollTop;
-                    };
-                }
-
+                button.classList.add("wmd-button-active");
+                button.classList.remove("wmd-button-inactive");
                 if (!button.isHelp) {
                     button.onclick = function () {
                         if (this.onmouseout) {
@@ -1446,19 +1457,13 @@
                 }
             }
             else {
-                image.style.backgroundPosition = button.XShift + " " + disabledYShift;
-                button.onmouseover = button.onmouseout = button.onclick = function () { };
+                button.classList.remove("wmd-button-active");
+                button.classList.add("wmd-button-inactive");
+                button.onclick = function () { };
             }
         }
 
-        function bindCommand(method) {
-            if (typeof method === "string")
-                method = commandManager[method];
-            return function () { method.apply(commandManager, arguments); }
-        }
-
         function makeSpritedButtonRow() {
-
             var buttonBar = panels.buttonBar;
 
             var normalYShift = "0px";
@@ -1469,17 +1474,12 @@
             buttonRow.id = "wmd-button-row" + postfix;
             buttonRow.className = 'wmd-button-row';
             buttonRow = buttonBar.appendChild(buttonRow);
-            var xPosition = 0;
-            var makeButton = function (id, title, XShift, textOp) {
+
+            var makeButton = function (id, title, textOp) {
                 var button = document.createElement("li");
-                button.className = "wmd-button";
-                button.style.left = xPosition + "px";
-                xPosition += 25;
-                var buttonImage = document.createElement("span");
+                button.className = "wmd-button " + id;
                 button.id = id + postfix;
-                button.appendChild(buttonImage);
                 button.title = title;
-                button.XShift = XShift;
                 if (textOp)
                     button.textOp = textOp;
                 setupButton(button, true);
@@ -1491,37 +1491,39 @@
                 spacer.className = "wmd-spacer wmd-spacer" + num;
                 spacer.id = "wmd-spacer" + num + postfix;
                 buttonRow.appendChild(spacer);
-                xPosition += 25;
             }
 
-            buttons.bold = makeButton("wmd-bold-button", getString("bold"), "0px", bindCommand("doBold"));
-            buttons.italic = makeButton("wmd-italic-button", getString("italic"), "-20px", bindCommand("doItalic"));
+            buttons.bold = makeButton("wmd-bold-button", getString("bold"), bindCommand("doBold"));
+            buttons.italic = makeButton("wmd-italic-button", getString("italic"), bindCommand("doItalic"));
             makeSpacer(1);
-            buttons.latex = makeButton("wmd-latex-button", getString("latex"), "-40px", bindCommand("doLatex"));
-            buttons.displaylatex = makeButton("wmd-latex-button-display", getString("latexdisplay"), "-60px", bindCommand("doLatexDisplay"));
+            buttons.latex = makeButton("wmd-latex-button", getString("latex"), bindCommand("doLatex"));
+            buttons.displaylatex = makeButton("wmd-latex-button-display", getString("latexdisplay"), bindCommand("doLatexDisplay"));
             makeSpacer(2);
-            buttons.link = makeButton("wmd-link-button", getString("link"), "-80px", bindCommand(function (chunk, postProcessing) {
+            buttons.link = makeButton("wmd-link-button", getString("link"), bindCommand(function (chunk, postProcessing) {
                 return this.doLinkOrImage(chunk, postProcessing, false);
             }));
 
-            buttons.user = makeButton("wmd-user-reference-button", getString("user"), "-100px", bindCommand("doUserReference"));
+            buttons.user = makeButton("wmd-user-reference-button", getString("user"), bindCommand("doUserReference"));
 
-            buttons.quote = makeButton("wmd-quote-button", getString("quote"), "-120px", bindCommand("doBlockquote"));
-            buttons.code = makeButton("wmd-code-button", getString("code"), "-140px", bindCommand("doCode"));
-            buttons.image = makeButton("wmd-image-button", getString("image"), "-160px", bindCommand(function (chunk, postProcessing) {
+            buttons.quote = makeButton("wmd-quote-button", getString("quote"), bindCommand("doBlockquote"));
+            buttons.code = makeButton("wmd-code-button", getString("code"), bindCommand("doCode"));
+            buttons.image = makeButton("wmd-image-button", getString("image"), bindCommand(function (chunk, postProcessing) {
                 return this.doLinkOrImage(chunk, postProcessing, true);
             }));
             makeSpacer(3);
-            buttons.olist = makeButton("wmd-olist-button", getString("olist"), "-180px", bindCommand(function (chunk, postProcessing) {
+            buttons.olist = makeButton("wmd-olist-button", getString("olist"), bindCommand(function (chunk, postProcessing) {
                 this.doList(chunk, postProcessing, true);
             }));
-            buttons.ulist = makeButton("wmd-ulist-button", getString("ulist"), "-200px", bindCommand(function (chunk, postProcessing) {
+            buttons.ulist = makeButton("wmd-ulist-button", getString("ulist"), bindCommand(function (chunk, postProcessing) {
                 this.doList(chunk, postProcessing, false);
             }));
-            buttons.heading = makeButton("wmd-heading-button", getString("heading"), "-220px", bindCommand("doHeading"));
-            buttons.hr = makeButton("wmd-hr-button", getString("hr"), "-240px", bindCommand("doHorizontalRule"));
+            buttons.heading = makeButton("wmd-heading-button", getString("heading"), bindCommand("doHeading"));
+            buttons.hr = makeButton("wmd-hr-button", getString("hr"), bindCommand("doHorizontalRule"));
             makeSpacer(3);
-            buttons.undo = makeButton("wmd-undo-button", getString("undo"), "-260px", null);
+            buttons.spoiler = makeButton("wmd-admonition-button", getString("admonition"), bindCommand("doAdmonition"));
+            buttons.spoiler = makeButton("wmd-spoiler-button", getString("spoiler"), bindCommand("doSpoiler"));
+            makeSpacer(4);
+            buttons.undo = makeButton("wmd-undo-button", getString("undo"), null);
             buttons.undo.execute = function (manager) { if (manager) manager.undo(); };
 
             var redoTitle = /win/.test(nav.platform.toLowerCase()) ?
@@ -1530,23 +1532,6 @@
 
             buttons.redo = makeButton("wmd-redo-button", redoTitle, "-280px", null);
             buttons.redo.execute = function (manager) { if (manager) manager.redo(); };
-
-            if (helpOptions) {
-                var helpButton = document.createElement("li");
-                var helpButtonImage = document.createElement("span");
-                helpButton.appendChild(helpButtonImage);
-                helpButton.className = "wmd-button wmd-help-button";
-                helpButton.id = "wmd-help-button" + postfix;
-                helpButton.XShift = "-300px";
-                helpButton.isHelp = true;
-                helpButton.style.right = "0px";
-                helpButton.title = getString("help");
-                helpButton.onclick = helpOptions.handler;
-
-                setupButton(helpButton, true);
-                buttonRow.appendChild(helpButton);
-                buttons.help = helpButton;
-            }
 
             setUndoRedoButtonStates();
         }
@@ -1593,16 +1578,16 @@
         chunk.selection = chunk.selection.replace(/\s+$/, "");
     };
 
-	commandProto.doLatex = function (chunk, postProcessing) {
-		/* This section is almost identical to doBorI below */
-		
+    commandProto.doLatex = function (chunk, postProcessing) {
+        /* This section is almost identical to doBorI below */
+        
         // Get rid of whitespace and fixup newlines.
         chunk.trimWhitespace();
         chunk.selection = chunk.selection.replace(/\n{2,}/g, "\n");
 
         // Look for stars before and after.  Is the chunk already marked up?
         // note that these regex matches cannot fail
-		var starsBefore = /(\$*$)/.exec(chunk.before)[0];
+        var starsBefore = /(\$*$)/.exec(chunk.before)[0];
         var starsAfter = /(^\$*)/.exec(chunk.after)[0];
 
         var prevStars = Math.min(starsBefore.length, starsAfter.length);
@@ -1628,18 +1613,18 @@
         }
 
         return;
-	};
-	
-	commandProto.doLatexDisplay = function (chunk, postProcessing) {
-		/* This section is almost identical to doBorI below */
-		
+    };
+    
+    commandProto.doLatexDisplay = function (chunk, postProcessing) {
+        /* This section is almost identical to doBorI below */
+        
         // Get rid of whitespace and fixup newlines.
         chunk.trimWhitespace();
         chunk.selection = chunk.selection.replace(/\n{2,}/g, "\n");
 
         // Look for stars before and after.  Is the chunk already marked up?
         // note that these regex matches cannot fail
-		var starsBefore = /((?:\${2})*$)/.exec(chunk.before)[0];
+        var starsBefore = /((?:\${2})*$)/.exec(chunk.before)[0];
         var starsAfter = /(^(?:\${2})*)/.exec(chunk.after)[0];
 
         var prevStars = Math.min(starsBefore.length, starsAfter.length);
@@ -1665,8 +1650,8 @@
         }
 
         return;
-	};
-	
+    };
+    
     commandProto.doBold = function (chunk, postProcessing) {
         return this.doBorI(chunk, postProcessing, 2, this.getString("boldexample"));
     };
@@ -1907,10 +1892,73 @@
         }
     };
 
-    // When making a list, hitting shift-enter will put your cursor on the next line
+    commandProto.doIndent = function(chunk, postProcessing) {
+        if (!chunk.selection) {
+            chunk.before += "    ";
+        }
+        else {
+            var selectedLines = chunk.selection.split("\n");
+            for (var i = 1; i < selectedLines.length; i++) {
+                selectedLines[i] = "    " + selectedLines[i];
+            }
+            chunk.selection = selectedLines.join("\n");
+
+            // Indent the current line
+            chunk.before = chunk.before.replace(/(^|\n)([^\^\n]*)$/, "$1    $2")
+        }
+    }
+
+    commandProto.doReverseIndent = function(chunk, postProcessing) {
+        if (chunk.selection) {
+            var selectedLines = chunk.selection.split("\n");
+            for (var i = 1; i < selectedLines.length; i++) {
+                selectedLines[i] = selectedLines[i].replace(/^([ ]{0,4})(.*)$/, "$2");
+            }
+            chunk.selection = selectedLines.join("\n");
+        }
+        // Reindent the current line
+        chunk.before = chunk.before.replace(/(^|\n)([ ]{0,4})(.*)$/, "$1$3");
+    }
+
+    commandProto.doReverseIndent = function(chunk, postProcessing) {
+        if (chunk.selection) {
+            var selectedLines = chunk.selection.split("\n");
+            for (var i = 1; i < selectedLines.length; i++) {
+                selectedLines[i] = selectedLines[i].replace(/^([ ]{0,4})(.*)$/, "$2");
+            }
+            chunk.selection = selectedLines.join("\n");
+        }
+        // Reindent the current line
+        chunk.before = chunk.before.replace(/(^|\n)([ ]{0,4})(.*)$/, "$1$3");
+    }
+
+    commandProto.doSpoiler = function(chunk, postProcessing) {
+        chunk.selection = "";
+        if (chunk.before && !/\s$/.test(chunk.before)) {
+            commandProto.doAutoindent(chunk, postProcessing);
+        }
+        chunk.before += "??? \"" + this.getString("spoilerSummary") + "\"";
+        commandProto.doAutoindent(chunk, postProcessing);
+        chunk.before += "    ";
+        chunk.selection = this.getString("spoilerDetail");
+        chunk.after = "\n" + chunk.after;
+    }
+
+    commandProto.doAdmonition = function(chunk, postProcessing) {
+        chunk.selection = "";
+        if (chunk.before && !/\s$/.test(chunk.before)) {
+            commandProto.doAutoindent(chunk, postProcessing);
+        }
+        chunk.before += "!!! note \"" + this.getString("spoilerSummary") + "\"";
+        commandProto.doAutoindent(chunk, postProcessing);
+        chunk.before += "    ";
+        chunk.selection = this.getString("spoilerDetail");
+        chunk.after = "\n" + chunk.after;
+    }
+
+    // Hitting enter will put your cursor on the next line
     // at the current indent level.
     commandProto.doAutoindent = function (chunk, postProcessing) {
-
         var commandMgr = this,
             fakeSelection = false;
 
@@ -1930,26 +1978,32 @@
             fakeSelection = true;
         }
 
-        if (/(\n|^)[ ]{0,3}([*+-]|\d+[.])[ \t]+.*\n$/.test(chunk.before)) {
+        if (/(\n|^)[ ]{0,3}([*+-]|\d+[.])[ \t]+.*$/.test(chunk.before)) {
+            var oldChunk = {...chunk};
             if (commandMgr.doList) {
+                chunk.before += "\n";
                 commandMgr.doList(chunk);
+                if (oldChunk.before  == chunk.before + chunk.startTag) {
+                    chunk.startTag = "";
+                    chunk.selection = "";
+                    chunk.before += "\n";
+                }
             }
         }
-        if (/(\n|^)[ ]{0,3}>[ \t]+.*\n$/.test(chunk.before)) {
-            if (commandMgr.doBlockquote) {
-                commandMgr.doBlockquote(chunk);
-            }
+        else if (/(\n|^)[ ]{0,3}>[ \t]+.*$/.test(chunk.before)) {
+            chunk.before += "\n";
+            commandMgr.doBlockquote(chunk);
         }
-        if (/(\n|^)(\t|[ ]{4,}).*\n$/.test(chunk.before)) {
-            if (commandMgr.doCode) {
-                commandMgr.doCode(chunk);
-            }
+        else {
+            var currentLine = chunk.before.split("\n").pop();
+            var indent = currentLine.match(/^\s*/)[0];
+            chunk.before += "\n" + indent;
         }
-        
+
         if (fakeSelection) {
             chunk.after = chunk.selection + chunk.after;
-            chunk.selection = "";
         }
+        chunk.selection = "";
     };
 
     commandProto.doBlockquote = function (chunk, postProcessing) {
@@ -2105,38 +2159,30 @@
         // line or is multiline.
         if ((!hasTextAfter && !hasTextBefore) || /\n/.test(chunk.selection)) {
 
-            chunk.before = chunk.before.replace(/[ ]{4}$/,
-                function (totalMatch) {
-                    chunk.selection = totalMatch + chunk.selection;
-                    return "";
-                });
+            // Use backticks (`) to delimit the code block.
 
-            var nLinesBack = 1;
-            var nLinesForward = 1;
+            chunk.trimWhitespace();
+            chunk.findTags(/```/, /```/);
 
-            if (/(\n|^)(\t|[ ]{4,}).*\n$/.test(chunk.before)) {
-                nLinesBack = 0;
+            if (!chunk.startTag && !chunk.endTag) {
+                chunk.startTag = "```\n";
+                chunk.endTag = "\n```";
+                if (!chunk.selection) {
+                    chunk.selection = this.getString("codeexample");
+                }
             }
-            if (/^\n(\t|[ ]{4,})/.test(chunk.after)) {
-                nLinesForward = 0;
-            }
-
-            chunk.skipLines(nLinesBack, nLinesForward);
-
-            if (!chunk.selection) {
-                chunk.startTag = "    ";
-                chunk.selection = this.getString("codeexample");
+            else if (chunk.endTag && !chunk.startTag) {
+                chunk.before += chunk.endTag;
+                chunk.endTag = "";
             }
             else {
-                if (/^[ ]{0,3}\S/m.test(chunk.selection)) {
-                    if (/\n/.test(chunk.selection))
-                        chunk.selection = chunk.selection.replace(/^/gm, "    ");
-                    else // if it's not multiline, do not select the four added spaces; this is more consistent with the doList behavior
-                        chunk.before += "    ";
-                }
-                else {
-                    chunk.selection = chunk.selection.replace(/^[ ]{4}/gm, "");
-                }
+                chunk.startTag = chunk.endTag = "";
+            }
+            if (!/(^|\n)$/.test(chunk.before)) {
+                chunk.startTag = '\n' + chunk.startTag;
+            }
+            if (!/^(\n|$)/.test(chunk.after)) {
+                chunk.endTag += '\n';
             }
         }
         else {
@@ -2205,16 +2251,12 @@
 
             return itemText;
         };
-
         chunk.findTags(/(\n|^)*[ ]{0,3}([*+-]|\d+[.])\s+/, null);
-
         if (chunk.before && !/\n$/.test(chunk.before) && !/^\n/.test(chunk.startTag)) {
             chunk.before += chunk.startTag;
             chunk.startTag = "";
         }
-
         if (chunk.startTag) {
-
             var hasDigits = /\d+[.]/.test(chunk.startTag);
             chunk.startTag = "";
             chunk.selection = chunk.selection.replace(/\n[ ]{4}/g, "\n");
@@ -2231,7 +2273,6 @@
         }
 
         var nLinesUp = 1;
-
         chunk.before = chunk.before.replace(previousItemsRegex,
             function (itemText) {
                 if (/^\s*([*+-])/.test(itemText)) {
@@ -2254,14 +2295,12 @@
                 nLinesDown = /[^\n]\n\n[^\n]/.test(itemText) ? 1 : 0;
                 return getPrefixedItem(itemText);
             });
-
         chunk.trimWhitespace(true);
         chunk.skipLines(nLinesUp, nLinesDown, true);
         chunk.startTag = prefix;
         var spaces = prefix.replace(/./g, " ");
         this.wrap(chunk, SETTINGS.lineLength - spaces.length);
         chunk.selection = chunk.selection.replace(/\n/g, "\n" + spaces);
-
     };
 
     commandProto.doHeading = function (chunk, postProcessing) {

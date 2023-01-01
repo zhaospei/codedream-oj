@@ -3,7 +3,7 @@ from django.contrib import admin
 from django.core.exceptions import PermissionDenied
 from django.db import connection, transaction
 from django.db.models import Q, TextField
-from django.forms import ModelForm, ModelMultipleChoiceField
+from django.forms import ModelForm, ModelMultipleChoiceField, TextInput
 from django.http import Http404, HttpResponseRedirect
 from django.shortcuts import get_object_or_404
 from django.urls import reverse, reverse_lazy
@@ -66,7 +66,13 @@ class ContestTagAdmin(admin.ModelAdmin):
 
 class ContestProblemInlineForm(ModelForm):
     class Meta:
-        widgets = {"problem": AdminHeavySelect2Widget(data_view="problem_select2")}
+        widgets = {
+            "problem": AdminHeavySelect2Widget(data_view="problem_select2"),
+            "frozen_subtasks": TextInput(attrs={"size": "3"}),
+            "points": TextInput(attrs={"size": "1"}),
+            "order": TextInput(attrs={"size": "1"}),
+            "output_prefix_override": TextInput(attrs={"size": "1"}),
+        }
 
 
 class ContestProblemInline(admin.TabularInline):
@@ -79,6 +85,7 @@ class ContestProblemInline(admin.TabularInline):
         "partial",
         "is_pretested",
         "max_submissions",
+        "frozen_subtasks",
         "output_prefix_override",
         "order",
         "rejudge_column",
@@ -158,7 +165,10 @@ class ContestAdmin(CompareVersionAdmin):
                 )
             },
         ),
-        (_("Scheduling"), {"fields": ("start_time", "end_time", "time_limit")}),
+        (
+            _("Scheduling"),
+            {"fields": ("start_time", "end_time", "time_limit", "freeze_after")},
+        ),
         (
             _("Details"),
             {
@@ -274,7 +284,8 @@ class ContestAdmin(CompareVersionAdmin):
         # We need this flag because `save_related` deals with the inlines, but does not know if we have already rescored
         self._rescored = False
         if form.changed_data and any(
-            f in form.changed_data for f in ("format_config", "format_name")
+            f in form.changed_data
+            for f in ("format_config", "format_name", "freeze_after")
         ):
             self._rescore(obj.key)
             self._rescored = True

@@ -32,10 +32,19 @@ class DefaultContestFormat(BaseContestFormat):
         points = 0
         format_data = {}
 
-        for result in participation.submissions.values("problem_id").annotate(
+        queryset = participation.submissions
+
+        if self.contest.freeze_after:
+            queryset = queryset.filter(
+                submission__date__lt=participation.start + self.contest.freeze_after
+            )
+
+        queryset = queryset.values("problem_id").annotate(
             time=Max("submission__date"),
             points=Max("points"),
-        ):
+        )
+
+        for result in queryset:
             dt = (result["time"] - participation.start).total_seconds()
             if result["points"]:
                 cumtime += dt
@@ -45,13 +54,14 @@ class DefaultContestFormat(BaseContestFormat):
             }
             points += result["points"]
 
+        self.handle_frozen_state(participation, format_data)
         participation.cumtime = max(cumtime, 0)
-        participation.score = points
+        participation.score = round(points, self.contest.points_precision)
         participation.tiebreaker = 0
         participation.format_data = format_data
         participation.save()
 
-    def display_user_problem(self, participation, contest_problem):
+    def display_user_problem(self, participation, contest_problem, show_final=False):
         format_data = (participation.format_data or {}).get(str(contest_problem.id))
         if format_data:
             return format_html(
@@ -66,12 +76,13 @@ class DefaultContestFormat(BaseContestFormat):
                     + self.best_solution_state(
                         format_data["points"], contest_problem.points
                     )
+                    + (" frozen" if format_data.get("frozen") else "")
                 ),
                 url=reverse(
                     "contest_user_submissions_ajax",
                     args=[
                         self.contest.key,
-                        participation.user.user.username,
+                        participation.id,
                         contest_problem.problem.code,
                     ],
                 ),
@@ -83,7 +94,7 @@ class DefaultContestFormat(BaseContestFormat):
         else:
             return mark_safe('<td class="problem-score-col"></td>')
 
-    def display_participation_result(self, participation):
+    def display_participation_result(self, participation, show_final=False):
         return format_html(
             '<td class="user-points">{points}<div class="solving-time">{cumtime}</div></td>',
             points=floatformat(participation.score, -self.contest.points_precision),

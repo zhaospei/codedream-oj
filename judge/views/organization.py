@@ -1,4 +1,3 @@
-from itertools import chain
 from django import forms
 from django.conf import settings
 from django.contrib import messages
@@ -58,6 +57,7 @@ from judge.models import (
     Contest,
     Notification,
     ContestProblem,
+    OrganizationProfile,
 )
 from judge import event_poster as event
 from judge.utils.ranker import ranker
@@ -71,6 +71,8 @@ from judge.utils.problems import user_attempted_ids
 from judge.views.problem import ProblemList
 from judge.views.contests import ContestList
 from judge.views.submission import AllSubmissions, SubmissionsListBase
+from judge.views.pagevote import PageVoteListView
+from judge.views.bookmark import BookMarkListView
 
 __all__ = [
     "OrganizationList",
@@ -151,13 +153,20 @@ class OrganizationMixin(OrganizationBase):
             return HttpResponsePermanentRedirect(
                 request.get_full_path().replace(kwargs["slug"], self.organization.slug)
             )
+        if self.request.user.is_authenticated:
+            OrganizationProfile.add_organization(
+                self.request.profile, self.organization
+            )
+
         return super(OrganizationMixin, self).dispatch(request, *args, **kwargs)
 
 
 class AdminOrganizationMixin(OrganizationMixin):
     def dispatch(self, request, *args, **kwargs):
         res = super(AdminOrganizationMixin, self).dispatch(request, *args, **kwargs)
-        if self.can_edit_organization(self.organization):
+        if not hasattr(self, "organization") or self.can_edit_organization(
+            self.organization
+        ):
             return res
         return generic_message(
             request,
@@ -170,7 +179,7 @@ class AdminOrganizationMixin(OrganizationMixin):
 class MemberOrganizationMixin(OrganizationMixin):
     def dispatch(self, request, *args, **kwargs):
         res = super(MemberOrganizationMixin, self).dispatch(request, *args, **kwargs)
-        if self.can_access(self.organization):
+        if not hasattr(self, "organization") or self.can_access(self.organization):
             return res
         return generic_message(
             request,
@@ -258,10 +267,11 @@ class OrganizationList(TitleMixin, ListView, OrganizationBase):
         return context
 
 
-class OrganizationHome(OrganizationDetailView):
+class OrganizationHome(OrganizationDetailView, PageVoteListView, BookMarkListView):
     template_name = "organization/home.html"
+    pagevote_object_name = "posts"
 
-    def get_posts(self):
+    def get_posts_and_page_obj(self):
         posts = (
             BlogPost.objects.filter(
                 visible=True,
@@ -275,12 +285,25 @@ class OrganizationHome(OrganizationDetailView):
         paginator = Paginator(posts, 10)
         page_number = self.request.GET.get("page", 1)
         posts = paginator.get_page(page_number)
-        return posts
+        return posts, paginator.page(page_number)
+
+    def get_comment_page(self, post):
+        return "b:%s" % post.id
 
     def get_context_data(self, **kwargs):
         context = super(OrganizationHome, self).get_context_data(**kwargs)
         context["title"] = self.object.name
-        context["posts"] = self.get_posts()
+        context["posts"], context["page_obj"] = self.get_posts_and_page_obj()
+        context = self.add_pagevote_context_data(context, "posts")
+        context = self.add_bookmark_context_data(context, "posts")
+
+        # Hack: This allows page_obj to have page_range for non-ListView class
+        setattr(
+            context["page_obj"], "page_range", context["posts"].paginator.page_range
+        )
+        context["first_page_href"] = self.request.path
+        context["page_prefix"] = "?page="
+
         context["post_comment_counts"] = {
             int(page[2:]): count
             for page, count in Comment.objects.filter(
@@ -304,6 +327,7 @@ class OrganizationHome(OrganizationDetailView):
         )
         context["future_contests"] = visible_contests.filter(start_time__gt=now)
         context["page_type"] = "home"
+
         return context
 
 
@@ -442,10 +466,10 @@ class OrganizationSubmissions(
     def contest(self):
         return None
 
-    def get_queryset(self):
+    def _get_queryset(self):
         return (
             super()
-            ._get_queryset()
+            ._get_entire_queryset()
             .filter(contest_object__organizations=self.organization)
         )
 
@@ -928,7 +952,13 @@ class EditOrganizationContest(
                     problem_form.save()
             for problem_form in problem_formset.deleted_objects:
                 problem_form.delete()
-            return super().post(request, *args, **kwargs)
+            super().post(request, *args, **kwargs)
+            return HttpResponseRedirect(
+                reverse(
+                    "organization_contests",
+                    args=(self.organization_id, self.organization.slug),
+                )
+            )
 
         self.object = self.contest
         return self.render_to_response(
@@ -1034,7 +1064,7 @@ class EditOrganizationBlog(
     MemberOrganizationMixin,
     UpdateView,
 ):
-    template_name = "organization/blog/add.html"
+    template_name = "organization/blog/edit.html"
     model = BlogPost
 
     def get_form_class(self):
@@ -1060,6 +1090,10 @@ class EditOrganizationBlog(
                 _("Not allowed to edit this blog"),
             )
 
+    def delete_blog(self, request, *args, **kwargs):
+        self.blog_id = kwargs["blog_pk"]
+        BlogPost.objects.get(pk=self.blog_id).delete()
+
     def get(self, request, *args, **kwargs):
         res = self.setup_blog(request, *args, **kwargs)
         if res:
@@ -1070,7 +1104,16 @@ class EditOrganizationBlog(
         res = self.setup_blog(request, *args, **kwargs)
         if res:
             return res
-        return super().post(request, *args, **kwargs)
+        if request.POST["action"] == "Delete":
+            self.create_notification("Delete blog")
+            self.delete_blog(request, *args, **kwargs)
+            cur_url = reverse(
+                "organization_pending_blogs",
+                args=(self.organization_id, self.organization.slug),
+            )
+            return HttpResponseRedirect(cur_url)
+        else:
+            return super().post(request, *args, **kwargs)
 
     def get_object(self):
         return self.blog
@@ -1078,29 +1121,32 @@ class EditOrganizationBlog(
     def get_title(self):
         return _("Edit blog %s") % self.object.title
 
+    def create_notification(self, action):
+        blog = BlogPost.objects.get(pk=self.blog_id)
+        link = reverse(
+            "edit_organization_blog",
+            args=[self.organization.id, self.organization.slug, self.blog_id],
+        )
+        html = f'<a href="{link}">{blog.title} - {self.organization.name}</a>'
+        post_authors = blog.authors.all()
+        posible_user = self.organization.admins.all() | post_authors
+        for user in posible_user:
+            if user.id == self.request.profile.id:
+                continue
+            notification = Notification(
+                owner=user,
+                author=self.request.profile,
+                category=action,
+                html_link=html,
+            )
+            notification.save()
+
     def form_valid(self, form):
         with transaction.atomic(), revisions.create_revision():
             res = super(EditOrganizationBlog, self).form_valid(form)
             revisions.set_comment(_("Edited from site"))
             revisions.set_user(self.request.user)
-
-            link = reverse(
-                "edit_organization_blog",
-                args=[self.organization.id, self.organization.slug, self.object.id],
-            )
-            html = (
-                f'<a href="{link}">{self.object.title} - {self.organization.name}</a>'
-            )
-            for user in self.organization.admins.all():
-                if user.id == self.request.profile.id:
-                    continue
-                notification = Notification(
-                    owner=user,
-                    author=self.request.profile,
-                    category="Edit blog",
-                    html_link=html,
-                )
-                notification.save()
+            self.create_notification("Edit blog")
             return res
 
 
